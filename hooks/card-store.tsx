@@ -10,6 +10,7 @@ interface CardStore {
   addCard: (card: Card) => void;
   updateCard: (id: string, updates: Partial<Card>) => void;
   deleteCard: (id: string) => void;
+  clearAllCards: () => void;
   createFolder: (name: string) => void;
   deleteFolder: (id: string) => void;
   moveCardToFolder: (cardId: string, folderId: string | null) => void;
@@ -109,6 +110,10 @@ export const [CardProvider, useCards] = createContextHook<CardStore>(() => {
     saveCards(newCards);
   }, [cards]);
 
+  const clearAllCards = useCallback(() => {
+    saveCards([]);
+  }, []);
+
   return {
     cards,
     folders,
@@ -116,6 +121,7 @@ export const [CardProvider, useCards] = createContextHook<CardStore>(() => {
     addCard,
     updateCard,
     deleteCard,
+    clearAllCards,
     createFolder,
     deleteFolder,
     moveCardToFolder,

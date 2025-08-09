@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Camera, FolderOpen, Share2 } from "lucide-react-native";
+import { Camera, FolderOpen, Share2, Search, Settings } from "lucide-react-native";
 import React from "react";
 
 export default function TabLayout() {
@@ -44,6 +44,20 @@ export default function TabLayout() {
         options={{
           title: "SHARE",
           tabBarIcon: ({ color }) => <Share2 size={24} color={color} strokeWidth={3} />,
+        }}
+      />
+      <Tabs.Screen
+        name="search"
+        options={{
+          title: "SEARCH",
+          tabBarIcon: ({ color }) => <Search size={24} color={color} strokeWidth={3} />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: "SETTINGS",
+          tabBarIcon: ({ color }) => <Settings size={24} color={color} strokeWidth={3} />,
         }}
       />
     </Tabs>
