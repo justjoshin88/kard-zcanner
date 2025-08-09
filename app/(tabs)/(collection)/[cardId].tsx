@@ -8,6 +8,7 @@ import {
   Image,
   Alert,
   Animated,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -58,6 +59,28 @@ export default function CardDetailsScreen() {
         }
       ]
     );
+  };
+
+  const handleLinkPress = async (url: string, siteName: string) => {
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert(
+          "LINK ERROR",
+          `CANNOT OPEN ${siteName.toUpperCase()} LINK`,
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error) {
+      console.error('Error opening link:', error);
+      Alert.alert(
+        "LINK ERROR",
+        `FAILED TO OPEN ${siteName.toUpperCase()} LINK`,
+        [{ text: "OK" }]
+      );
+    }
   };
 
   const frontInterpolate = flipAnimation.interpolate({
@@ -177,7 +200,12 @@ export default function CardDetailsScreen() {
               <View style={styles.linksContainer}>
                 <Text style={styles.linksTitle}>EXTERNAL LINKS</Text>
                 {Object.entries(card.links).map(([site, url]) => (
-                  <TouchableOpacity key={site} style={styles.linkButton}>
+                  <TouchableOpacity 
+                    key={site} 
+                    style={styles.linkButton}
+                    onPress={() => handleLinkPress(url, site)}
+                    activeOpacity={0.8}
+                  >
                     <ExternalLink size={16} color="#000000" strokeWidth={3} />
                     <Text style={styles.linkText}>{site.toUpperCase()}</Text>
                   </TouchableOpacity>
