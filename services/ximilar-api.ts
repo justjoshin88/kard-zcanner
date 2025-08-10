@@ -128,65 +128,14 @@ function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Ca
 
 export async function identifyCard(base64Image: string): Promise<Card | null> {
   try {
-    console.log("identifyCard: sport_id pass 1 (with hints)");
-    const sportData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
-      records: [
-        {
-          _base64: base64Image,
-          Side: "front",
-          Category: "Card/Sport Card",
-          "Foil/Holo": "Non-Foil",
-          Rotation: "rotation_ok",
-        },
-      ],
-      pricing: true,
-      slab_grade: true,
-      slab_id: true,
-    });
-    const sportRecord = sportData?.records?.[0];
-    if (sportRecord && (sportRecord._status?.code ?? 200) === 200) {
-      const { match, tags } = extractCardFromObjects(sportRecord._objects);
-      const c = toCard(match, tags);
-      if (c) {
-        console.log("identifyCard: sport_id success", { name: c.name, price: c.price });
-        return c;
-      }
-    }
-
-    console.log("identifyCard: tcg_id pass 2 (with hints)");
-    const tcgData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
-      records: [
-        {
-          _base64: base64Image,
-          Side: "front",
-          Alphabet: "latin",
-          Category: "Card/Trading Card Game",
-          "Foil/Holo": "Non-Foil",
-          Rotation: "rotation_ok",
-        },
-      ],
-      pricing: true,
-      slab_grade: true,
-      slab_id: true,
-    });
-    const tcgRecord = tcgData?.records?.[0];
-    if (tcgRecord && (tcgRecord._status?.code ?? 200) === 200) {
-      const { match, tags } = extractCardFromObjects(tcgRecord._objects);
-      const c = toCard(match, tags);
-      if (c) {
-        console.log("identifyCard: tcg_id success", { name: c.name, price: c.price });
-        return c;
-      }
-    }
-
-    console.log("identifyCard: analyze pass 3 (broad)");
+    console.log("identifyCard: analyze pass 1 (broad, no hints)");
     const analyzeData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, {
       records: [{ _base64: base64Image }],
       pricing: true,
     });
     const analyzeRecord = analyzeData?.records?.[0];
-    if (analyzeRecord) {
-      const { match, tags } = extractCardFromObjects(analyzeRecord._objects);
+    if ((analyzeRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(analyzeRecord?._objects);
       const c = toCard(match, tags);
       if (c) {
         console.log("identifyCard: analyze success", { name: c.name, price: c.price });
@@ -194,7 +143,71 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
       }
     }
 
-    console.log("identifyCard: OCR fallback pass 4 (card_ocr_id)");
+    console.log("identifyCard: sport_id pass 2 (minimal body)");
+    const sportData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
+      records: [{ _base64: base64Image }],
+      pricing: true,
+      slab_grade: true,
+      slab_id: true,
+    });
+    const sportRecord = sportData?.records?.[0];
+    if ((sportRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(sportRecord?._objects);
+      const c = toCard(match, tags);
+      if (c) {
+        console.log("identifyCard: sport_id success", { name: c.name, price: c.price });
+        return c;
+      }
+    }
+
+    console.log("identifyCard: tcg_id pass 3 (minimal body)");
+    const tcgData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
+      records: [{ _base64: base64Image }],
+      pricing: true,
+      slab_grade: true,
+      slab_id: true,
+    });
+    const tcgRecord = tcgData?.records?.[0];
+    if ((tcgRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(tcgRecord?._objects);
+      const c = toCard(match, tags);
+      if (c) {
+        console.log("identifyCard: tcg_id success", { name: c.name, price: c.price });
+        return c;
+      }
+    }
+
+    console.log("identifyCard: slab_id pass 4");
+    const slabData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/slab_id`, {
+      records: [{ _base64: base64Image }],
+      slab_grade: true,
+    });
+    const slabRecord = slabData?.records?.[0];
+    if ((slabRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(slabRecord?._objects);
+      const c = toCard(match, tags);
+      if (c) {
+        console.log("identifyCard: slab_id success", { name: c.name, price: c.price });
+        return c;
+      }
+    }
+
+    console.log("identifyCard: comics_id pass 5");
+    const comicsData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/comics_id`, {
+      records: [{ _base64: base64Image }],
+      pricing: true,
+    });
+    const comicsRecord = comicsData?.records?.[0];
+    if ((comicsRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(comicsRecord?._objects);
+      const c = toCard(match, tags);
+      if (c) {
+        console.log("identifyCard: comics_id success", { name: c.name, price: c.price });
+        return c;
+      }
+    }
+
+    console.log("identifyCard: OCR fallback pass 6 (card_ocr_id)");
     const ocrData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/card_ocr_id`, {
       records: [{ _base64: base64Image }],
     });
