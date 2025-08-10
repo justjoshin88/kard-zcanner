@@ -17,7 +17,8 @@ import {
   Shield,
   Bell,
   Palette,
-  Database
+  Database,
+  Share2
 } from "lucide-react-native";
 import { useCards } from "@/hooks/card-store";
 import { exportToCSV } from "@/utils/export";
@@ -134,6 +135,13 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>COLLECTION</Text>
+          
+          <SettingItem
+            icon={<Share2 size={24} color="#FF00FF" strokeWidth={3} />}
+            title="SHARE COLLECTION"
+            subtitle="Share your card collection"
+            onPress={() => Alert.alert("SHARE", "Share functionality coming soon!")}
+          />
           
           <SettingItem
             icon={<Download size={24} color="#00FF00" strokeWidth={3} />}
