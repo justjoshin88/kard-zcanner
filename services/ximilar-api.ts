@@ -32,6 +32,7 @@ type BestMatch = {
   set?: string;
   set_name?: string;
   card_number?: string;
+  number?: string;
   full_name?: string;
   subcategory?: string;
   rarity?: string;
@@ -45,16 +46,34 @@ type BestMatch = {
       price?: number | null;
       currency?: string;
     }>;
+    avg?: number | null;
+    median?: number | null;
+    low?: number | null;
+    high?: number | null;
   };
 };
 
 type Extracted = { match: BestMatch | undefined; tags: XimilarObject["_tags"] | undefined };
 
 function pickMatch(obj: XimilarObject | undefined): BestMatch | undefined {
+  const candidates: BestMatch[] = [];
   const best = obj?._identification?.best_match;
-  if (best) return best;
-  const alt = obj?._identification?.alternatives;
-  return alt && alt.length > 0 ? alt[0] : undefined;
+  if (best) candidates.push(best);
+  const alt = obj?._identification?.alternatives ?? [];
+  for (const a of alt) candidates.push(a);
+  if (candidates.length === 0) return undefined;
+  const score = (m: BestMatch) => {
+    let s = 0;
+    if (m.year) s += 2;
+    if (m.set || m.set_name) s += 2;
+    if (m.card_number || m.number) s += 2;
+    if (m.links && Object.keys(m.links).length > 0) s += 1;
+    const pr = m.pricing as unknown;
+    if (pr && typeof pr === "object") s += 2;
+    return s;
+  };
+  candidates.sort((a, b) => score(b) - score(a));
+  return candidates[0];
 }
 
 function extractCardFromObjects(objs: XimilarObject[] | undefined): Extracted {
@@ -89,6 +108,11 @@ function extractPrice(match: BestMatch | undefined): number | undefined {
     if (Array.isArray(list)) {
       for (const item of list) pushIfValid((item?.price ?? null) as unknown);
     }
+
+    if (typeof p.avg === "number") pushIfValid(p.avg);
+    if (typeof p.median === "number") pushIfValid(p.median);
+    if (typeof p.low === "number") pushIfValid(p.low);
+    if (typeof p.high === "number") pushIfValid(p.high);
 
     Object.values(p).forEach((v) => {
       if (typeof v === "number") {
@@ -142,12 +166,14 @@ async function postJson<T>(url: string, body: unknown): Promise<T | null> {
 function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Card | null {
   if (!match) return null;
   const price = extractPrice(match);
+  const yearVal = match.year != null ? String(match.year) : undefined;
+  const cardNo = match.card_number || match.number;
   const card: Card = {
     id: "",
     name: match.name || match.full_name || "Unknown Card",
-    year: (match.year ?? undefined) as string | undefined,
+    year: yearVal,
     set: match.set || match.set_name,
-    cardNumber: match.card_number,
+    cardNumber: cardNo,
     subcategory: match.subcategory,
     company: match.company,
     team: match.team,
@@ -166,23 +192,7 @@ function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Ca
 
 export async function identifyCard(base64Image: string): Promise<Card | null> {
   try {
-    console.log("identifyCard: analyze pass 1 (broad, no hints)");
-    const analyzeData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, {
-      records: [{ _base64: base64Image }],
-      pricing: true,
-      price_sources: ["tcgplayer", "ebay", "cardmarket"],
-    });
-    const analyzeRecord = analyzeData?.records?.[0];
-    if ((analyzeRecord?._status?.code ?? 200) === 200) {
-      const { match, tags } = extractCardFromObjects(analyzeRecord?._objects);
-      const c = toCard(match, tags);
-      if (c) {
-        console.log("identifyCard: analyze success", { name: c.name, price: c.price });
-        return c;
-      }
-    }
-
-    console.log("identifyCard: sport_id pass 2 (minimal body)");
+    console.log("identifyCard: sport_id pass 1 (sports first)");
     const sportData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
       records: [{ _base64: base64Image }],
       pricing: true,
@@ -200,7 +210,23 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
       }
     }
 
-    console.log("identifyCard: tcg_id pass 3 (minimal body)");
+    console.log("identifyCard: analyze pass 2 (broad)");
+    const analyzeData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, {
+      records: [{ _base64: base64Image }],
+      pricing: true,
+      price_sources: ["tcgplayer", "ebay", "cardmarket"],
+    });
+    const analyzeRecord = analyzeData?.records?.[0];
+    if ((analyzeRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(analyzeRecord?._objects);
+      const c = toCard(match, tags);
+      if (c) {
+        console.log("identifyCard: analyze success", { name: c.name, price: c.price });
+        return c;
+      }
+    }
+
+    console.log("identifyCard: tcg_id pass 3");
     const tcgData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
       records: [{ _base64: base64Image }],
       pricing: true,
