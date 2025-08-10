@@ -73,13 +73,51 @@ function median(values: number[]): number | undefined {
 }
 
 function extractPrice(match: BestMatch | undefined): number | undefined {
-  const list = match?.pricing?.list ?? [];
-  const valid = list
-    .map(p => p?.price ?? null)
-    .filter((v): v is number => typeof v === "number" && isFinite(v) && v > 0);
-  if (valid.length === 0) return undefined;
-  const med = median(valid);
-  return med ?? valid[0];
+  const pricing: unknown = match?.pricing as unknown;
+  const values: number[] = [];
+
+  const pushIfValid = (v: unknown) => {
+    if (typeof v === "number" && isFinite(v) && v > 0) values.push(v);
+  };
+
+  if (!pricing) return undefined;
+
+  if (typeof pricing === "object" && pricing !== null) {
+    const p: Record<string, unknown> = pricing as Record<string, unknown>;
+
+    const list = (p.list as Array<{ price?: number | null }> | undefined) ?? [];
+    if (Array.isArray(list)) {
+      for (const item of list) pushIfValid((item?.price ?? null) as unknown);
+    }
+
+    Object.values(p).forEach((v) => {
+      if (typeof v === "number") {
+        pushIfValid(v);
+      } else if (Array.isArray(v)) {
+        for (const it of v) {
+          if (typeof it === "number") pushIfValid(it);
+          else if (it && typeof it === "object") {
+            const obj = it as Record<string, unknown>;
+            if (typeof obj.price === "number") pushIfValid(obj.price);
+            if (typeof obj.avg === "number") pushIfValid(obj.avg);
+            if (typeof obj.median === "number") pushIfValid(obj.median);
+          }
+        }
+      } else if (v && typeof v === "object") {
+        const obj = v as Record<string, unknown>;
+        if (typeof obj.price === "number") pushIfValid(obj.price);
+        if (typeof obj.avg === "number") pushIfValid(obj.avg);
+        if (typeof obj.median === "number") pushIfValid(obj.median);
+        if (typeof obj.low === "number") pushIfValid(obj.low);
+        if (typeof obj.mid === "number") pushIfValid(obj.mid);
+        if (typeof obj.high === "number") pushIfValid(obj.high);
+      }
+    });
+  }
+
+  if (values.length === 0) return undefined;
+  const med = median(values);
+  return med ?? values[0];
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T | null> {
@@ -132,6 +170,7 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const analyzeData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, {
       records: [{ _base64: base64Image }],
       pricing: true,
+      price_sources: ["tcgplayer", "ebay", "cardmarket"],
     });
     const analyzeRecord = analyzeData?.records?.[0];
     if ((analyzeRecord?._status?.code ?? 200) === 200) {
@@ -147,6 +186,7 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const sportData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
       records: [{ _base64: base64Image }],
       pricing: true,
+      price_sources: ["tcgplayer", "ebay"],
       slab_grade: true,
       slab_id: true,
     });
@@ -164,6 +204,7 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const tcgData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
       records: [{ _base64: base64Image }],
       pricing: true,
+      price_sources: ["tcgplayer", "cardmarket", "ebay"],
       slab_grade: true,
       slab_id: true,
     });
@@ -196,6 +237,7 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const comicsData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/comics_id`, {
       records: [{ _base64: base64Image }],
       pricing: true,
+      price_sources: ["ebay"],
     });
     const comicsRecord = comicsData?.records?.[0];
     if ((comicsRecord?._status?.code ?? 200) === 200) {
