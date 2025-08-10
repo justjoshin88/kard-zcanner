@@ -78,7 +78,6 @@ export default function ScannerScreen() {
     setIsProcessing(true);
     try {
       const result = await identifyCard(base64);
-      
       if (result) {
         const newCard: Card = {
           ...result,
@@ -87,14 +86,18 @@ export default function ScannerScreen() {
           dateAdded: new Date().toISOString(),
           folderId: null,
         };
-        
         setIdentifiedCard(newCard);
       } else {
-        Alert.alert("NO CARD DETECTED", "TRY ANOTHER IMAGE");
+        console.warn("processImage: no card match returned");
+        Alert.alert("NO CARD DETECTED", "Try a closer, well-lit front image. Avoid sleeves and fill the frame.");
+        setCapturedImage(null);
+        setFrontBase64(null);
       }
     } catch (error) {
       console.error("Error processing image:", error);
       Alert.alert("ERROR", "FAILED TO IDENTIFY CARD");
+      setCapturedImage(null);
+      setFrontBase64(null);
     } finally {
       setIsProcessing(false);
     }
@@ -292,9 +295,9 @@ export default function ScannerScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {capturedImage ? (
+      {isProcessing ? (
         <View style={styles.processingContainer}>
-          <Image source={{ uri: capturedImage }} style={styles.processingImage} />
+          {capturedImage && <Image source={{ uri: capturedImage }} style={styles.processingImage} />}
           <View style={styles.processingOverlay}>
             <ActivityIndicator size="large" color="#00FF00" />
             <Text style={styles.processingText}>ANALYZING CARD...</Text>
@@ -302,34 +305,34 @@ export default function ScannerScreen() {
         </View>
       ) : (
         <>
-          <CameraView 
+          <CameraView
             ref={cameraRef}
-            style={styles.camera} 
+            style={styles.camera}
             facing={facing}
           >
             <View style={styles.cameraOverlay}>
               <View style={styles.scanFrame} />
             </View>
           </CameraView>
-          
+
           <View style={styles.controls}>
-            <TouchableOpacity 
-              style={styles.controlButton} 
+            <TouchableOpacity
+              style={styles.controlButton}
               onPress={handlePickImage}
             >
               <Upload size={28} color="#000000" strokeWidth={3} />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.captureButton, isCapturing && styles.captureButtonDisabled]} 
+
+            <TouchableOpacity
+              style={[styles.captureButton, isCapturing && styles.captureButtonDisabled]}
               onPress={handleCapture}
               disabled={isCapturing}
             >
               <Camera size={36} color="#000000" strokeWidth={3} />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.controlButton} 
+
+            <TouchableOpacity
+              style={styles.controlButton}
               onPress={() => setFacing(facing === "back" ? "front" : "back")}
             >
               <RotateCw size={28} color="#000000" strokeWidth={3} />

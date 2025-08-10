@@ -6,27 +6,8 @@ const API_BASE_URL = "https://api.ximilar.com";
 interface XimilarObject {
   name?: string;
   _identification?: {
-    best_match?: {
-      name: string;
-      year?: string | number | null;
-      set?: string;
-      set_name?: string;
-      card_number?: string;
-      full_name?: string;
-      subcategory?: string;
-      rarity?: string;
-      company?: string;
-      team?: string;
-      grade?: string;
-      certificate_number?: string;
-      links?: Record<string, string>;
-      pricing?: {
-        list?: {
-          price?: number | null;
-          currency?: string;
-        }[];
-      };
-    };
+    best_match?: BestMatch;
+    alternatives?: BestMatch[];
   };
   _tags?: {
     Grade?: { name: string }[];
@@ -34,16 +15,52 @@ interface XimilarObject {
   };
 }
 
-interface XimilarResponse {
-  records: {
-    _objects?: XimilarObject[];
-  }[];
+interface XimilarRecord {
+  _status?: { code?: number; text?: string };
+  _objects?: XimilarObject[];
+  grades?: Record<string, unknown>;
+  card?: Array<{ centering?: Record<string, unknown> }>;
 }
 
-function extractCardFromObjects(objs: XimilarObject[] | undefined): { match: NonNullable<XimilarObject["_identification"]>["best_match"] | undefined; tags: XimilarObject["_tags"] | undefined } {
+interface XimilarResponse {
+  records?: XimilarRecord[];
+}
+
+type BestMatch = {
+  name: string;
+  year?: string | number | null;
+  set?: string;
+  set_name?: string;
+  card_number?: string;
+  full_name?: string;
+  subcategory?: string;
+  rarity?: string;
+  company?: string;
+  team?: string;
+  grade?: string;
+  certificate_number?: string;
+  links?: Record<string, string>;
+  pricing?: {
+    list?: Array<{
+      price?: number | null;
+      currency?: string;
+    }>;
+  };
+};
+
+type Extracted = { match: BestMatch | undefined; tags: XimilarObject["_tags"] | undefined };
+
+function pickMatch(obj: XimilarObject | undefined): BestMatch | undefined {
+  const best = obj?._identification?.best_match;
+  if (best) return best;
+  const alt = obj?._identification?.alternatives;
+  return alt && alt.length > 0 ? alt[0] : undefined;
+}
+
+function extractCardFromObjects(objs: XimilarObject[] | undefined): Extracted {
   if (!objs || objs.length === 0) return { match: undefined, tags: undefined };
-  const cardObj = objs.find(o => (o.name ?? "").toLowerCase() === "card") ?? objs.find(o => o._identification?.best_match);
-  const match = cardObj?._identification?.best_match;
+  const cardObj = objs.find(o => (o.name ?? "").toLowerCase() === "card") ?? objs.find(o => o._identification?.best_match || (o._identification?.alternatives ?? []).length > 0);
+  const match = pickMatch(cardObj);
   const tags = cardObj?._tags;
   return { match, tags };
 }
@@ -55,115 +72,143 @@ function median(values: number[]): number | undefined {
   return arr.length % 2 !== 0 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
 }
 
-function extractPrice(match: NonNullable<XimilarObject["_identification"]>["best_match"] | undefined): number | undefined {
+function extractPrice(match: BestMatch | undefined): number | undefined {
   const list = match?.pricing?.list ?? [];
-  const valid = list.map(p => p?.price ?? null).filter((v): v is number => typeof v === "number" && isFinite(v) && v > 0);
+  const valid = list
+    .map(p => p?.price ?? null)
+    .filter((v): v is number => typeof v === "number" && isFinite(v) && v > 0);
   if (valid.length === 0) return undefined;
   const med = median(valid);
   return med ?? valid[0];
 }
 
+async function postJson<T>(url: string, body: unknown): Promise<T | null> {
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Token ${API_TOKEN}` },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      console.error("postJson HTTP", resp.status, url);
+      return null;
+    }
+    const json = (await resp.json()) as T;
+    return json;
+  } catch (e) {
+    console.error("postJson error", e);
+    return null;
+  }
+}
+
+function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Card | null {
+  if (!match) return null;
+  const price = extractPrice(match);
+  const card: Card = {
+    id: "",
+    name: match.name || match.full_name || "Unknown Card",
+    year: (match.year ?? undefined) as string | undefined,
+    set: match.set || match.set_name,
+    cardNumber: match.card_number,
+    subcategory: match.subcategory,
+    company: match.company,
+    team: match.team,
+    rarity: match.rarity,
+    price,
+    grade: tags?.Grade?.[0]?.name || match.grade,
+    gradeCompany: tags?.Company?.[0]?.name,
+    certificateNumber: match.certificate_number,
+    links: match.links,
+    imageUri: "",
+    dateAdded: "",
+    folderId: null,
+  };
+  return card;
+}
+
 export async function identifyCard(base64Image: string): Promise<Card | null> {
   try {
-    console.log("identifyCard: starting sport_id with pricing; sending tags for faster/better match");
-    const sportResp = await fetch(`${API_BASE_URL}/collectibles/v2/sport_id`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${API_TOKEN}`,
-      },
-      body: JSON.stringify({
-        records: [
-          {
-            _base64: base64Image,
-            Side: "front",
-          },
-        ],
-        pricing: true,
-        slab_grade: true,
-        slab_id: true,
-      }),
+    console.log("identifyCard: sport_id pass 1 (with hints)");
+    const sportData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
+      records: [
+        {
+          _base64: base64Image,
+          Side: "front",
+          Category: "Card/Sport Card",
+          "Foil/Holo": "Non-Foil",
+          Rotation: "rotation_ok",
+        },
+      ],
+      pricing: true,
+      slab_grade: true,
+      slab_id: true,
     });
-
-    if (sportResp.ok) {
-      const data: XimilarResponse = await sportResp.json();
-      const { match, tags } = extractCardFromObjects(data.records?.[0]?._objects);
-      if (match) {
-        const price = extractPrice(match);
-        const card: Card = {
-          id: "",
-          name: match.name || match.full_name || "Unknown Card",
-          year: (match.year ?? undefined) as string | undefined,
-          set: match.set || match.set_name,
-          cardNumber: match.card_number,
-          subcategory: match.subcategory,
-          company: match.company,
-          team: match.team,
-          rarity: match.rarity,
-          price,
-          grade: tags?.Grade?.[0]?.name || match.grade,
-          gradeCompany: tags?.Company?.[0]?.name,
-          certificateNumber: match.certificate_number,
-          links: match.links,
-          imageUri: "",
-          dateAdded: "",
-          folderId: null,
-        };
-        console.log("identifyCard: sport_id success", { name: card.name, price: card.price });
-        return card;
+    const sportRecord = sportData?.records?.[0];
+    if (sportRecord && (sportRecord._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(sportRecord._objects);
+      const c = toCard(match, tags);
+      if (c) {
+        console.log("identifyCard: sport_id success", { name: c.name, price: c.price });
+        return c;
       }
-    } else {
-      console.error("identifyCard: sport_id HTTP", sportResp.status);
     }
 
-    console.log("identifyCard: fallback to tcg_id with pricing");
-    const tcgResp = await fetch(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${API_TOKEN}`,
-      },
-      body: JSON.stringify({
-        records: [
-          {
-            _base64: base64Image,
-            Side: "front",
-            Alphabet: "latin",
-            Category: "Card/Trading Card Game",
-          },
-        ],
-        pricing: true,
-      }),
+    console.log("identifyCard: tcg_id pass 2 (with hints)");
+    const tcgData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
+      records: [
+        {
+          _base64: base64Image,
+          Side: "front",
+          Alphabet: "latin",
+          Category: "Card/Trading Card Game",
+          "Foil/Holo": "Non-Foil",
+          Rotation: "rotation_ok",
+        },
+      ],
+      pricing: true,
+      slab_grade: true,
+      slab_id: true,
     });
-
-    if (!tcgResp.ok) {
-      console.error("identifyCard: tcg_id HTTP", tcgResp.status);
-      return null;
+    const tcgRecord = tcgData?.records?.[0];
+    if (tcgRecord && (tcgRecord._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(tcgRecord._objects);
+      const c = toCard(match, tags);
+      if (c) {
+        console.log("identifyCard: tcg_id success", { name: c.name, price: c.price });
+        return c;
+      }
     }
 
-    const tcgData: XimilarResponse = await tcgResp.json();
-    const { match: tcgMatch } = extractCardFromObjects(tcgData.records?.[0]?._objects);
-    if (!tcgMatch) {
-      console.warn("identifyCard: tcg_id no match");
-      return null;
+    console.log("identifyCard: analyze pass 3 (broad)");
+    const analyzeData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, {
+      records: [{ _base64: base64Image }],
+      pricing: true,
+    });
+    const analyzeRecord = analyzeData?.records?.[0];
+    if (analyzeRecord) {
+      const { match, tags } = extractCardFromObjects(analyzeRecord._objects);
+      const c = toCard(match, tags);
+      if (c) {
+        console.log("identifyCard: analyze success", { name: c.name, price: c.price });
+        return c;
+      }
     }
-    const price = extractPrice(tcgMatch);
-    const card: Card = {
-      id: "",
-      name: tcgMatch.name || tcgMatch.full_name || "Unknown Card",
-      year: (tcgMatch.year ?? undefined) as string | undefined,
-      set: tcgMatch.set || tcgMatch.set_name,
-      cardNumber: tcgMatch.card_number,
-      subcategory: tcgMatch.subcategory || "TCG",
-      rarity: tcgMatch.rarity,
-      price,
-      links: tcgMatch.links,
-      imageUri: "",
-      dateAdded: "",
-      folderId: null,
-    };
-    console.log("identifyCard: tcg_id success", { name: card.name, price: card.price });
-    return card;
+
+    console.log("identifyCard: OCR fallback pass 4 (card_ocr_id)");
+    const ocrData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/card_ocr_id`, {
+      records: [{ _base64: base64Image }],
+    });
+    const ocrRecord = ocrData?.records?.[0];
+    const firstObj = ocrRecord?._objects?.find(o => (o.name ?? "").toLowerCase() === "card") ?? ocrRecord?._objects?.[0];
+    const ocrMatch = firstObj?._identification?.best_match ?? (firstObj?._identification?.alternatives ?? [])[0];
+    const ocrCard = toCard(ocrMatch, firstObj?._tags);
+    if (ocrCard) {
+      console.log("identifyCard: OCR best-effort result", { name: ocrCard.name });
+      return ocrCard;
+    }
+
+    console.warn("identifyCard: no match across all strategies");
+    return null;
   } catch (error) {
     console.error("Error identifying card:", error);
     return null;
@@ -198,15 +243,15 @@ export async function gradeCard(frontBase64: string, backBase64?: string): Promi
       console.error("gradeCard HTTP", resp.status);
       return null;
     }
-    const json = await resp.json();
+    const json = (await resp.json()) as XimilarResponse;
     const grades = json?.records?.[0]?.grades ?? {};
     return {
-      corners: typeof grades.corners === "number" ? grades.corners : undefined,
-      edges: typeof grades.edges === "number" ? grades.edges : undefined,
-      surface: typeof grades.surface === "number" ? grades.surface : undefined,
-      centering: typeof grades.centering === "number" ? grades.centering : undefined,
-      final: typeof grades.final === "number" ? grades.final : undefined,
-      condition: typeof grades.condition === "string" ? grades.condition : undefined,
+      corners: typeof (grades as any).corners === "number" ? (grades as any).corners : undefined,
+      edges: typeof (grades as any).edges === "number" ? (grades as any).edges : undefined,
+      surface: typeof (grades as any).surface === "number" ? (grades as any).surface : undefined,
+      centering: typeof (grades as any).centering === "number" ? (grades as any).centering : undefined,
+      final: typeof (grades as any).final === "number" ? (grades as any).final : undefined,
+      condition: typeof (grades as any).condition === "string" ? (grades as any).condition : undefined,
     };
   } catch (e) {
     console.error("gradeCard error", e);
@@ -237,7 +282,7 @@ export async function conditionCard(mode: ConditionMode, frontBase64: string): P
       console.error("conditionCard HTTP", resp.status);
       return null;
     }
-    const json = await resp.json();
+    const json = (await resp.json()) as any;
     const obj = json?.records?.[0]?._objects?.[0]?.Condition?.[0] ?? json?.records?.[0]?.Condition?.[0] ?? null;
     if (!obj) return null;
     return {
@@ -271,7 +316,7 @@ export async function centeringCard(frontBase64: string): Promise<{
       console.error("centeringCard HTTP", resp.status);
       return null;
     }
-    const json = await resp.json();
+    const json = (await resp.json()) as any;
     const grades = json?.records?.[0]?.grades ?? {};
     const cardInfo = json?.records?.[0]?.card?.[0]?.centering ?? {};
     return {
