@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -8,13 +8,14 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { Camera, Upload, RotateCw } from "lucide-react-native";
+import { Camera, Upload, RotateCw, ImagePlus, Gauge } from "lucide-react-native";
 import { useCards } from "@/hooks/card-store";
-import { identifyCard } from "@/services/ximilar-api";
+import { identifyCard, gradeCard, conditionCard, centeringCard, type ConditionMode } from "@/services/ximilar-api";
 import { Card } from "@/types/card";
 
 export default function ScannerScreen() {
@@ -22,8 +23,16 @@ export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [isCapturing, setIsCapturing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [frontBase64, setFrontBase64] = useState<string | null>(null);
+  const [backImage, setBackImage] = useState<string | null>(null);
+  const [backBase64, setBackBase64] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [identifiedCard, setIdentifiedCard] = useState<Card | null>(null);
+  const [isGrading, setIsGrading] = useState(false);
+  const [gradeResult, setGradeResult] = useState<{ corners?: number; edges?: number; surface?: number; centering?: number; final?: number; condition?: string } | null>(null);
+  const [conditionMode, setConditionMode] = useState<ConditionMode>("ebay");
+  const [conditionResult, setConditionResult] = useState<{ label?: string; scale_value?: number; max_scale_value?: number; mode?: string } | null>(null);
+  const [centeringResult, setCenteringResult] = useState<{ centering?: number; leftRight?: string; topBottom?: string } | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const { addCard } = useCards();
 
@@ -39,6 +48,7 @@ export default function ScannerScreen() {
       
       if (photo) {
         setCapturedImage(photo.uri);
+        setFrontBase64(photo.base64 ?? null);
         await processImage(photo.base64 || "", photo.uri);
       }
     } catch (error) {
@@ -59,6 +69,7 @@ export default function ScannerScreen() {
 
     if (!result.canceled && result.assets[0]) {
       setCapturedImage(result.assets[0].uri);
+      setFrontBase64(result.assets[0].base64 ?? null);
       await processImage(result.assets[0].base64 || "", result.assets[0].uri);
     }
   };
@@ -91,15 +102,62 @@ export default function ScannerScreen() {
 
   const handleSaveCard = () => {
     if (identifiedCard) {
-      addCard(identifiedCard);
+      const enriched: Card = { ...identifiedCard, backImageUri: backImage ?? undefined };
+      addCard(enriched);
       Alert.alert("SUCCESS", "CARD ADDED TO COLLECTION");
       resetScanner();
     }
   };
 
+  const handlePickBackImage = async () => {
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, base64: true, quality: 0.9 });
+      if (!res.canceled && res.assets[0]) {
+        setBackImage(res.assets[0].uri);
+        setBackBase64(res.assets[0].base64 ?? null);
+      }
+    } catch (e) {
+      console.error("handlePickBackImage error", e);
+      Alert.alert("ERROR", "FAILED TO PICK BACK IMAGE");
+    }
+  };
+
+  const handleGrade = async () => {
+    if (!frontBase64) {
+      Alert.alert("MISSING IMAGE", "CAPTURE OR UPLOAD FRONT IMAGE FIRST");
+      return;
+    }
+    setIsGrading(true);
+    setGradeResult(null);
+    setConditionResult(null);
+    setCenteringResult(null);
+    try {
+      const [g, c, cen] = await Promise.all([
+        gradeCard(frontBase64, backBase64 ?? undefined),
+        conditionCard(conditionMode, frontBase64),
+        centeringCard(frontBase64),
+      ]);
+      setGradeResult(g);
+      setConditionResult(c);
+      setCenteringResult(cen);
+    } catch (e) {
+      console.error("handleGrade error", e);
+      Alert.alert("ERROR", "FAILED TO GRADE CARD");
+    } finally {
+      setIsGrading(false);
+    }
+  };
+
   const resetScanner = () => {
     setCapturedImage(null);
+    setFrontBase64(null);
+    setBackImage(null);
+    setBackBase64(null);
     setIdentifiedCard(null);
+    setIsGrading(false);
+    setGradeResult(null);
+    setConditionResult(null);
+    setCenteringResult(null);
   };
 
   if (!permission) {
@@ -132,7 +190,7 @@ export default function ScannerScreen() {
               <Text style={styles.cardNumber}>#{identifiedCard.cardNumber}</Text>
               
               {identifiedCard.price && (
-                <View style={styles.priceContainer}>
+                <View style={styles.priceContainer} testID="price-section">
                   <Text style={styles.priceLabel}>VALUE</Text>
                   <Text style={styles.priceValue}>${identifiedCard.price.toFixed(2)}</Text>
                 </View>
@@ -144,13 +202,85 @@ export default function ScannerScreen() {
                 </View>
               )}
             </View>
+
+            <View style={styles.gradingPrep}>
+              <Text style={styles.sectionTitle}>IMPROVE GRADING</Text>
+              <View style={styles.backRow}>
+                <TouchableOpacity style={styles.uploadBackBtn} onPress={handlePickBackImage} testID="upload-back">
+                  <ImagePlus size={18} color="#000000" strokeWidth={3} />
+                  <Text style={styles.uploadBackText}>{backImage ? "REPLACE BACK IMAGE" : "UPLOAD BACK IMAGE"}</Text>
+                </TouchableOpacity>
+                {backImage && (
+                  <Image source={{ uri: backImage }} style={styles.backThumb} />
+                )}
+              </View>
+
+              <View style={styles.modeRow}>
+                {(["ebay","psa","bgs","sgc","cgc"] as ConditionMode[]).map(m => (
+                  <TouchableOpacity
+                    key={m}
+                    testID={`mode-${m}`}
+                    style={[styles.modePill, conditionMode === m && styles.modePillActive]}
+                    onPress={() => setConditionMode(m)}
+                    accessibilityRole="button"
+                  >
+                    <Text style={[styles.modeText, conditionMode === m && styles.modeTextActive]}>{m.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity style={styles.gradeButton} onPress={handleGrade} disabled={isGrading} testID="grade-button">
+                {isGrading ? (
+                  <ActivityIndicator color="#000000" />
+                ) : (
+                  <Gauge size={18} color="#000000" strokeWidth={3} />
+                )}
+                <Text style={styles.gradeButtonText}>{isGrading ? "GRADING..." : "GRADE"}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {(gradeResult || conditionResult || centeringResult) && (
+              <View style={styles.sectionsContainer}>
+                {gradeResult && (
+                  <View style={styles.sectionBox} testID="grading-section">
+                    <Text style={styles.sectionHeader}>GRADING</Text>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>FINAL</Text><Text style={styles.kvVal}>{gradeResult.final ?? "-"}</Text></View>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>CORNERS</Text><Text style={styles.kvVal}>{gradeResult.corners ?? "-"}</Text></View>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>EDGES</Text><Text style={styles.kvVal}>{gradeResult.edges ?? "-"}</Text></View>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>SURFACE</Text><Text style={styles.kvVal}>{gradeResult.surface ?? "-"}</Text></View>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>CENTERING</Text><Text style={styles.kvVal}>{gradeResult.centering ?? "-"}</Text></View>
+                    {gradeResult.condition && (
+                      <View style={styles.rowBetween}><Text style={styles.kvKey}>CONDITION</Text><Text style={styles.kvVal}>{gradeResult.condition}</Text></View>
+                    )}
+                  </View>
+                )}
+
+                {conditionResult && (
+                  <View style={[styles.sectionBox, styles.sectionAlt]} testID="condition-section">
+                    <Text style={styles.sectionHeader}>CONDITION</Text>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>MODE</Text><Text style={styles.kvVal}>{(conditionResult.mode ?? conditionMode).toUpperCase()}</Text></View>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>LABEL</Text><Text style={styles.kvVal}>{conditionResult.label ?? "-"}</Text></View>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>SCORE</Text><Text style={styles.kvVal}>{conditionResult.scale_value ?? "-"} / {conditionResult.max_scale_value ?? "-"}</Text></View>
+                  </View>
+                )}
+
+                {centeringResult && (
+                  <View style={styles.sectionBox} testID="centering-section">
+                    <Text style={styles.sectionHeader}>CENTERING</Text>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>GRADE</Text><Text style={styles.kvVal}>{centeringResult.centering ?? "-"}</Text></View>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>L/R</Text><Text style={styles.kvVal}>{centeringResult.leftRight ?? "-"}</Text></View>
+                    <View style={styles.rowBetween}><Text style={styles.kvKey}>T/B</Text><Text style={styles.kvVal}>{centeringResult.topBottom ?? "-"}</Text></View>
+                  </View>
+                )}
+              </View>
+            )}
             
             <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.primaryButton} onPress={handleSaveCard}>
+              <TouchableOpacity style={styles.primaryButton} onPress={handleSaveCard} testID="save-card">
                 <Text style={styles.buttonText}>ADD TO COLLECTION</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity style={styles.secondaryButton} onPress={resetScanner}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={resetScanner} testID="scan-another">
                 <Text style={styles.secondaryButtonText}>SCAN ANOTHER</Text>
               </TouchableOpacity>
             </View>
@@ -399,5 +529,127 @@ const styles = StyleSheet.create({
     fontWeight: "900" as const,
     color: "#00FF00",
     letterSpacing: 1,
+  },
+  gradingPrep: {
+    backgroundColor: "#000000",
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+    padding: 16,
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "900" as const,
+    color: "#00FF00",
+    marginBottom: 12,
+    letterSpacing: 1,
+  },
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
+  uploadBackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFFF00",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+  },
+  uploadBackText: {
+    fontSize: 12,
+    fontWeight: "900" as const,
+    color: "#000000",
+    letterSpacing: 0.5,
+  },
+  backThumb: {
+    width: 48,
+    height: 48,
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+  },
+  modeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  modePill: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: "#000000",
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+  },
+  modePillActive: {
+    backgroundColor: "#FF00FF",
+    borderColor: "#FFFFFF",
+  },
+  modeText: {
+    fontSize: 12,
+    fontWeight: "900" as const,
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
+  },
+  modeTextActive: {
+    color: "#000000",
+  },
+  gradeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#00FF00",
+    padding: 14,
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+  },
+  gradeButtonText: {
+    fontSize: 16,
+    fontWeight: "900" as const,
+    color: "#000000",
+    letterSpacing: 1,
+  },
+  sectionsContainer: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  sectionBox: {
+    backgroundColor: "#000000",
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+    padding: 14,
+  },
+  sectionAlt: {
+    backgroundColor: "#001f3f",
+  },
+  sectionHeader: {
+    fontSize: 16,
+    fontWeight: "900" as const,
+    color: "#FFFF00",
+    marginBottom: 10,
+    letterSpacing: 1,
+  },
+  rowBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  kvKey: {
+    fontSize: 12,
+    fontWeight: "900" as const,
+    color: "#00FF00",
+    letterSpacing: 0.5,
+  },
+  kvVal: {
+    fontSize: 14,
+    fontWeight: "900" as const,
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
   },
 });
