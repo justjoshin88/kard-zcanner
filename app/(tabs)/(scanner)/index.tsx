@@ -192,12 +192,12 @@ export default function ScannerScreen() {
               <Text style={styles.cardDetails}>{identifiedCard.year} • {identifiedCard.set}</Text>
               <Text style={styles.cardNumber}>#{identifiedCard.cardNumber}</Text>
               
-              {identifiedCard.price && (
+              {typeof identifiedCard.price === 'number' && isFinite(identifiedCard.price) ? (
                 <View style={styles.priceContainer} testID="price-section">
                   <Text style={styles.priceLabel}>VALUE</Text>
                   <Text style={styles.priceValue}>${identifiedCard.price.toFixed(2)}</Text>
                 </View>
-              )}
+              ) : null}
               
               {identifiedCard.rarity && (
                 <View style={styles.rarityBadge}>

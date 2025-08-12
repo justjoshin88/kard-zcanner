@@ -77,9 +77,9 @@ export default function CollectionScreen() {
           <View style={styles.gridInfo}>
             <Text style={styles.gridName} numberOfLines={1}>{item.name}</Text>
             <Text style={styles.gridDetails}>{item.year}</Text>
-            {item.price && (
+            {typeof item.price === 'number' && isFinite(item.price) ? (
               <Text style={styles.gridPrice}>${item.price.toFixed(2)}</Text>
-            )}
+            ) : null}
           </View>
         </TouchableOpacity>
       );
@@ -102,11 +102,11 @@ export default function CollectionScreen() {
           <Text style={styles.listDetails}>{item.year} • {item.set}</Text>
           <Text style={styles.listNumber}>#{item.cardNumber}</Text>
         </View>
-        {item.price && (
+        {typeof item.price === 'number' && isFinite(item.price) ? (
           <View style={styles.listPriceContainer}>
             <Text style={styles.listPrice}>${item.price.toFixed(2)}</Text>
           </View>
-        )}
+        ) : null}
       </TouchableOpacity>
     );
   };
