@@ -189,6 +189,38 @@ export default function CardDetailsScreen() {
               </View>
             )}
 
+            {Array.isArray(card.listings) && card.listings.length > 0 && (
+              <View style={styles.listingsContainer} testID="detail-listings">
+                <Text style={styles.listingsTitle}>MARKET LISTINGS</Text>
+                {card.listings.slice(0, 10).map((l, idx) => (
+                  <TouchableOpacity
+                    key={(l.item_id ?? String(idx)) + String(idx)}
+                    style={styles.listingRow}
+                    onPress={() => l.item_link ? handleLinkPress(l.item_link, l.source ?? 'listing') : undefined}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.listingName} numberOfLines={1}>{l.name ?? 'Listing'}</Text>
+                      <Text style={styles.listingMeta} numberOfLines={1}>
+                        {(l.source ?? '').toUpperCase()} {l.date_of_creation ? `• ${l.date_of_creation}` : ''} {l.grade_company ? `• ${l.grade_company}` : ''} {typeof l.grade_value === 'number' ? ` ${l.grade_value}` : ''}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.listingPrice}>
+                        {typeof l.price === 'number' ? `${l.price.toFixed(2)}` : '-'} {l.currency ?? ''}
+                      </Text>
+                      {l.item_link ? (
+                        <View style={styles.visitRow}>
+                          <ExternalLink size={14} color="#000000" strokeWidth={3} />
+                          <Text style={styles.visitText}>VIEW</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             <View style={styles.metaInfo}>
               <Text style={styles.metaLabel}>ADDED ON</Text>
               <Text style={styles.metaValue}>
@@ -398,6 +430,60 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: "#FFFFFF",
     marginBottom: 20,
+  },
+  listingsContainer: {
+    backgroundColor: "#000000",
+    padding: 14,
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+    marginBottom: 20,
+  },
+  listingsTitle: {
+    fontSize: 16,
+    fontWeight: "900" as const,
+    color: "#FFFF00",
+    letterSpacing: 1,
+    marginBottom: 10,
+  },
+  listingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFF00",
+    padding: 10,
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+    marginBottom: 10,
+  },
+  listingName: {
+    fontSize: 14,
+    fontWeight: "900" as const,
+    color: "#000000",
+    letterSpacing: 0.5,
+  },
+  listingMeta: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: "#000000",
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  listingPrice: {
+    fontSize: 16,
+    fontWeight: "900" as const,
+    color: "#000000",
+  },
+  visitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  visitText: {
+    fontSize: 10,
+    fontWeight: "900" as const,
+    color: "#000000",
+    letterSpacing: 0.5,
   },
   gradeLabel: {
     fontSize: 12,

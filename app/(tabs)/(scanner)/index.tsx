@@ -16,7 +16,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Camera, Upload, RotateCw, ImagePlus, Gauge } from "lucide-react-native";
 import { useCards } from "@/hooks/card-store";
 import { identifyCard, gradeCard, conditionCard, centeringCard, type ConditionMode } from "@/services/ximilar-api";
-import { Card } from "@/types/card";
+import { Card, MarketListing } from "@/types/card";
 
 export default function ScannerScreen() {
   const [facing, setFacing] = useState<CameraType>("back");
@@ -191,14 +191,28 @@ export default function ScannerScreen() {
               <Text style={styles.cardName}>{identifiedCard.name}</Text>
               <Text style={styles.cardDetails}>{identifiedCard.year} • {identifiedCard.set}</Text>
               <Text style={styles.cardNumber}>#{identifiedCard.cardNumber}</Text>
-              
+
               {typeof identifiedCard.price === 'number' && isFinite(identifiedCard.price) ? (
                 <View style={styles.priceContainer} testID="price-section">
                   <Text style={styles.priceLabel}>VALUE</Text>
                   <Text style={styles.priceValue}>${identifiedCard.price.toFixed(2)}</Text>
                 </View>
               ) : null}
-              
+
+              {Array.isArray(identifiedCard.listings) && identifiedCard.listings.length > 0 ? (
+                <View style={styles.listingsBox} testID="listings-section">
+                  <Text style={styles.sectionHeader}>MARKET LISTINGS</Text>
+                  {identifiedCard.listings.slice(0, 5).map((l, idx) => (
+                    <View key={(l.item_id ?? String(idx)) + String(idx)} style={styles.rowBetween}>
+                      <Text style={styles.kvKey}>{(l.source ?? 'MARKET').toUpperCase()}</Text>
+                      <Text style={styles.kvVal}>
+                        {typeof l.price === 'number' ? `${l.price.toFixed(2)}` : '-'} {l.currency ?? ''}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
               {identifiedCard.rarity && (
                 <View style={styles.rarityBadge}>
                   <Text style={styles.rarityText}>{identifiedCard.rarity}</Text>
@@ -620,6 +634,13 @@ const styles = StyleSheet.create({
   sectionsContainer: {
     gap: 12,
     marginBottom: 20,
+  },
+  listingsBox: {
+    backgroundColor: "#000000",
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+    padding: 14,
+    marginTop: 10,
   },
   sectionBox: {
     backgroundColor: "#000000",

@@ -1,4 +1,4 @@
-import { Card } from "@/types/card";
+import { Card, MarketListing } from "@/types/card";
 
 const API_TOKEN = "4a1a39b8d2b6795a8d4fd172183147a9b5e5b8ef";
 const API_BASE_URL = "https://api.ximilar.com";
@@ -46,8 +46,18 @@ type BestMatch = {
   links?: Record<string, string>;
   pricing?: {
     list?: Array<{
+      item_id?: string;
+      item_link?: string;
+      name?: string;
       price?: number | null;
       currency?: string;
+      country_code?: string;
+      source?: string;
+      date_of_creation?: string;
+      grade_company?: string | null;
+      grade?: number | null;
+      grade_value?: number | null;
+      date_of_sale?: string | null;
     }>;
     avg?: number | null;
     median?: number | null;
@@ -166,11 +176,35 @@ async function postJson<T>(url: string, body: unknown): Promise<T | null> {
   }
 }
 
+function normalizeListings(match: BestMatch | undefined): MarketListing[] | undefined {
+  const raw = (match?.pricing as any)?.list as Array<Record<string, unknown>> | undefined;
+  if (!raw || !Array.isArray(raw)) return undefined;
+  const items: MarketListing[] = [];
+  for (const it of raw) {
+    const listing: MarketListing = {
+      item_id: typeof it.item_id === "string" ? it.item_id : undefined,
+      item_link: typeof it.item_link === "string" ? it.item_link : undefined,
+      name: typeof it.name === "string" ? it.name : undefined,
+      price: typeof it.price === "number" ? it.price : undefined,
+      currency: typeof it.currency === "string" ? it.currency : undefined,
+      country_code: typeof it.country_code === "string" ? it.country_code : undefined,
+      source: typeof it.source === "string" ? it.source : undefined,
+      date_of_creation: typeof it.date_of_creation === "string" ? it.date_of_creation : undefined,
+      grade_company: typeof it.grade_company === "string" ? it.grade_company : null,
+      grade_value: typeof it.grade_value === "number" ? it.grade_value : (typeof it.grade === "number" ? it.grade : null),
+      date_of_sale: typeof it.date_of_sale === "string" ? it.date_of_sale : null,
+    };
+    items.push(listing);
+  }
+  return items.length > 0 ? items : undefined;
+}
+
 function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Card | null {
   if (!match) return null;
   const price = extractPrice(match);
   const yearVal = match.year != null ? String(match.year) : undefined;
   const cardNo = match.card_number || match.number;
+  const listings = normalizeListings(match);
   const card: Card = {
     id: "",
     name: match.name || match.full_name || "Unknown Card",
@@ -186,6 +220,7 @@ function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Ca
     gradeCompany: tags?.Company?.[0]?.name,
     certificateNumber: match.certificate_number,
     links: match.links,
+    listings,
     imageUri: "",
     dateAdded: "",
     folderId: null,

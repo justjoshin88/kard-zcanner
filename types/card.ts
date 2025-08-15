@@ -1,3 +1,17 @@
+export interface MarketListing {
+  item_id?: string;
+  item_link?: string;
+  name?: string;
+  price?: number;
+  currency?: string;
+  country_code?: string;
+  source?: string;
+  date_of_creation?: string;
+  grade_company?: string | null;
+  grade_value?: number | null;
+  date_of_sale?: string | null;
+}
+
 export interface Card {
   id: string;
   name: string;
@@ -13,6 +27,7 @@ export interface Card {
   gradeCompany?: string;
   certificateNumber?: string;
   links?: Record<string, string>;
+  listings?: MarketListing[];
   imageUri: string;
   backImageUri?: string;
   dateAdded: string;
