@@ -112,8 +112,18 @@ function extractPrice(match: BestMatch | undefined): number | undefined {
   const pricing: unknown = match?.pricing as unknown;
   const values: number[] = [];
 
+  const toNum = (v: unknown): number | undefined => {
+    if (typeof v === "number") return isFinite(v) && v > 0 ? v : undefined;
+    if (typeof v === "string") {
+      const n = Number(v.replace(/[^0-9.\-]/g, ""));
+      return isFinite(n) && n > 0 ? n : undefined;
+    }
+    return undefined;
+  };
+
   const pushIfValid = (v: unknown) => {
-    if (typeof v === "number" && isFinite(v) && v > 0) values.push(v);
+    const n = toNum(v);
+    if (typeof n === "number") values.push(n);
   };
 
   if (!pricing) return undefined;
@@ -121,37 +131,39 @@ function extractPrice(match: BestMatch | undefined): number | undefined {
   if (typeof pricing === "object" && pricing !== null) {
     const p: Record<string, unknown> = pricing as Record<string, unknown>;
 
-    const list = (p.list as Array<{ price?: number | null }> | undefined) ?? [];
+    const list = (p.list as Array<{ price?: unknown }> | undefined) ?? [];
     if (Array.isArray(list)) {
-      for (const item of list) pushIfValid((item?.price ?? null) as unknown);
+      for (const item of list) pushIfValid(item?.price ?? null);
     }
 
-    if (typeof p.avg === "number") pushIfValid(p.avg);
-    if (typeof p.median === "number") pushIfValid(p.median);
-    if (typeof p.low === "number") pushIfValid(p.low);
-    if (typeof p.high === "number") pushIfValid(p.high);
+    pushIfValid((p as any).avg);
+    pushIfValid((p as any).median);
+    pushIfValid((p as any).low);
+    pushIfValid((p as any).high);
 
     Object.values(p).forEach((v) => {
-      if (typeof v === "number") {
-        pushIfValid(v);
-      } else if (Array.isArray(v)) {
+      if (Array.isArray(v)) {
         for (const it of v) {
-          if (typeof it === "number") pushIfValid(it);
+          if (typeof it === "number" || typeof it === "string") pushIfValid(it);
           else if (it && typeof it === "object") {
             const obj = it as Record<string, unknown>;
-            if (typeof obj.price === "number") pushIfValid(obj.price);
-            if (typeof obj.avg === "number") pushIfValid(obj.avg);
-            if (typeof obj.median === "number") pushIfValid(obj.median);
+            pushIfValid(obj.price);
+            pushIfValid(obj.avg);
+            pushIfValid(obj.median);
+            pushIfValid((obj as any).low);
+            pushIfValid((obj as any).high);
           }
         }
       } else if (v && typeof v === "object") {
         const obj = v as Record<string, unknown>;
-        if (typeof obj.price === "number") pushIfValid(obj.price);
-        if (typeof obj.avg === "number") pushIfValid(obj.avg);
-        if (typeof obj.median === "number") pushIfValid(obj.median);
-        if (typeof obj.low === "number") pushIfValid(obj.low);
-        if (typeof obj.mid === "number") pushIfValid(obj.mid);
-        if (typeof obj.high === "number") pushIfValid(obj.high);
+        pushIfValid(obj.price);
+        pushIfValid(obj.avg);
+        pushIfValid(obj.median);
+        pushIfValid((obj as any).low);
+        pushIfValid((obj as any).mid);
+        pushIfValid((obj as any).high);
+      } else if (typeof v === "number" || typeof v === "string") {
+        pushIfValid(v);
       }
     });
   }
@@ -185,17 +197,22 @@ function normalizeListings(match: BestMatch | undefined): MarketListing[] | unde
   if (!raw || !Array.isArray(raw)) return undefined;
   const items: MarketListing[] = [];
   for (const it of raw) {
+    const priceUnknown = (it as any).price as unknown;
+    const priceNum = typeof priceUnknown === "number" ? priceUnknown : (typeof priceUnknown === "string" ? Number(priceUnknown.replace(/[^0-9.\-]/g, "")) : undefined);
+    const gradeUnknown = (it as any).grade_value as unknown;
+    const gradeNum = typeof gradeUnknown === "number" ? gradeUnknown : (typeof gradeUnknown === "string" ? Number(gradeUnknown.replace(/[^0-9.\-]/g, "")) : undefined);
+
     const listing: MarketListing = {
       item_id: typeof it.item_id === "string" ? it.item_id : undefined,
       item_link: typeof it.item_link === "string" ? it.item_link : undefined,
       name: typeof it.name === "string" ? it.name : undefined,
-      price: typeof it.price === "number" ? it.price : undefined,
+      price: typeof priceNum === "number" && isFinite(priceNum) ? priceNum : undefined,
       currency: typeof it.currency === "string" ? it.currency : undefined,
       country_code: typeof it.country_code === "string" ? it.country_code : undefined,
       source: typeof it.source === "string" ? it.source : undefined,
       date_of_creation: typeof it.date_of_creation === "string" ? it.date_of_creation : undefined,
       grade_company: typeof it.grade_company === "string" ? it.grade_company : null,
-      grade_value: typeof it.grade_value === "number" ? it.grade_value : (typeof it.grade === "number" ? it.grade : null),
+      grade_value: typeof gradeNum === "number" && isFinite(gradeNum) ? gradeNum : (typeof (it as any).grade === "number" ? (it as any).grade : null),
       date_of_sale: typeof it.date_of_sale === "string" ? it.date_of_sale : null,
     };
     items.push(listing);

@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   Platform,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
@@ -189,8 +190,18 @@ export default function ScannerScreen() {
             
             <View style={styles.cardInfo}>
               <Text style={styles.cardName}>{identifiedCard.name}</Text>
-              <Text style={styles.cardDetails}>{identifiedCard.year} • {identifiedCard.set}</Text>
-              <Text style={styles.cardNumber}>#{identifiedCard.cardNumber}</Text>
+              {(() => {
+                const parts: string[] = [];
+                if (identifiedCard.year) parts.push(String(identifiedCard.year));
+                if (identifiedCard.set) parts.push(String(identifiedCard.set));
+                const details = parts.join(" • ");
+                return details.length > 0 ? (
+                  <Text style={styles.cardDetails}>{details}</Text>
+                ) : null;
+              })()}
+              {identifiedCard.cardNumber ? (
+                <Text style={styles.cardNumber}>#{identifiedCard.cardNumber}</Text>
+              ) : null}
 
               {typeof identifiedCard.price === 'number' && isFinite(identifiedCard.price) ? (
                 <View style={styles.priceContainer} testID="price-section">
@@ -203,12 +214,20 @@ export default function ScannerScreen() {
                 <View style={styles.listingsBox} testID="listings-section">
                   <Text style={styles.sectionHeader}>MARKET LISTINGS</Text>
                   {identifiedCard.listings.slice(0, 5).map((l, idx) => (
-                    <View key={(l.item_id ?? String(idx)) + String(idx)} style={styles.rowBetween}>
+                    <TouchableOpacity
+                      key={(l.item_id ?? String(idx)) + String(idx)}
+                      style={styles.rowBetween}
+                      onPress={() => {
+                        if (l.item_link) Linking.openURL(l.item_link).catch(() => Alert.alert('ERROR', 'FAILED TO OPEN LINK')); 
+                      }}
+                      accessibilityRole="link"
+                      testID={`listing-${idx}`}
+                    >
                       <Text style={styles.kvKey}>{(l.source ?? 'MARKET').toUpperCase()}</Text>
                       <Text style={styles.kvVal}>
                         {typeof l.price === 'number' ? `${l.price.toFixed(2)}` : '-'} {l.currency ?? ''}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </View>
               ) : null}
