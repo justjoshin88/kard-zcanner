@@ -11,7 +11,7 @@ import {
   Platform,
   Linking,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { Camera, Upload, RotateCw, ImagePlus, Gauge } from "lucide-react-native";
@@ -20,6 +20,7 @@ import { identifyCard, gradeCard, conditionCard, centeringCard, type ConditionMo
 import { Card, MarketListing } from "@/types/card";
 
 export default function ScannerScreen() {
+  const insets = useSafeAreaInsets();
   const [facing, setFacing] = useState<CameraType>("back");
   const [permission, requestPermission] = useCameraPermissions();
   const [isCapturing, setIsCapturing] = useState(false);
@@ -348,7 +349,7 @@ export default function ScannerScreen() {
             </View>
           </CameraView>
 
-          <View style={styles.controls}>
+          <View style={[styles.controls, { paddingBottom: 20 + (insets.bottom ?? 0), paddingTop: 20 }]}>
             <TouchableOpacity
               style={styles.controlButton}
               onPress={handlePickImage}
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    paddingVertical: 30,
+    paddingVertical: 0,
     paddingHorizontal: 20,
     backgroundColor: "#000000",
   },

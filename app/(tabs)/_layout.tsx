@@ -2,8 +2,13 @@ import { Tabs } from "expo-router";
 import { Camera, FolderOpen, Search } from "lucide-react-native";
 import React from "react";
 import { Image, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const extraBottom = Math.max(8, insets.bottom + 8);
+  const baseHeight = 70;
+
   return (
     <Tabs
       screenOptions={{
@@ -12,8 +17,8 @@ export default function TabLayout() {
           backgroundColor: "#000000",
           borderTopWidth: 4,
           borderTopColor: "#00FF00",
-          height: 70,
-          paddingBottom: 10,
+          height: baseHeight + extraBottom,
+          paddingBottom: 10 + extraBottom,
           paddingTop: 10,
         },
         tabBarActiveTintColor: "#00FF00",
