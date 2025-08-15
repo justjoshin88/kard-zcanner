@@ -270,6 +270,12 @@ function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Ca
   return card;
 }
 
+const TCG_KEYWORDS = [
+  "pokemon","pokémon","yugioh","yu-gi-oh","yu gi oh","mtg","magic the gathering","lorcana","one piece","flesh and blood","fab","metazoo","digimon","dragon ball super","dragon ball","dbs","weiss schwarz","vanguard","union arena","grand archive","force of will","marvel champions","garbage pail kids","star wars unlimited","ultraman","riftbound","rune","marvel universe","lotr","lord of the rings","final fantasy","arkham horror"
+] as const;
+
+const SPORT_SUBCATEGORIES = ["baseball","basketball","football","hockey","soccer","mma"] as const;
+
 function extractOcrNamesFromResponse(data: XimilarResponse | null): string[] {
   const names: string[] = [];
   const rec = data?.records?.[0];
@@ -285,10 +291,12 @@ function extractOcrNamesFromResponse(data: XimilarResponse | null): string[] {
     }
   }
   const joined = texts.join(" ");
-  const tokens = joined.match(/[A-Z][A-Z]+(?:\s+[A-Z][A-Z]+)+/g) || [];
+  const tokensUpper = joined.match(/[A-Z][A-Z]+(?:\s+[A-Z0-9#'\-][A-Z0-9#'\-]+)*/g) || [];
+  const tokensTitle = joined.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z0-9\-']+)*)\b/g) || [];
+  const tokens = [...tokensUpper, ...tokensTitle];
   for (const t of tokens) {
     const norm = t.trim().toLowerCase();
-    if (norm.length >= 5 && !names.includes(norm)) names.push(norm);
+    if (norm.length >= 3 && !names.includes(norm)) names.push(norm);
   }
   return names;
 }
@@ -326,7 +334,7 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     }
 
     if (anyCard) {
-      const looksTcg = subTag ? ['pokemon','yugioh','magic','lorcana','one piece','digimon','dragon ball','flesh and blood','metazoo','star wars','weiss schwarz','vanguard','union arena','grand archive','force of will','marvel champions','garbage pail kids','ultraman','riftbound','rune','','tcg'].some(k => subTag.includes(k)) : false;
+      const looksTcg = subTag ? TCG_KEYWORDS.some(k => subTag.includes(k)) : false;
       if (looksTcg) {
         const tcgData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
           records: [{ _base64: base64Image }],
