@@ -524,6 +524,17 @@ export async function sportId(input: { base64?: string; url?: string; pricing?: 
   });
 }
 
+export async function tcgId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; slab_grade?: boolean; analyze_all?: boolean }): Promise<XimilarResponse | null> {
+  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
+    records,
+    pricing: input.pricing ?? false,
+    slab_id: input.slab_id ?? false,
+    slab_grade: input.slab_grade ?? false,
+    analyze_all: input.analyze_all ?? false,
+  });
+}
+
 export async function comicsId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; lang?: string }): Promise<XimilarResponse | null> {
   const records = input.base64 ? [{ _base64: input.base64, lang: input.lang }] : input.url ? [{ _url: input.url, lang: input.lang }] : [];
   return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/comics_id`, {
