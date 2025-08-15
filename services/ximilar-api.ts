@@ -3,6 +3,8 @@ import { Card } from "@/types/card";
 const API_TOKEN = "4a1a39b8d2b6795a8d4fd172183147a9b5e5b8ef";
 const API_BASE_URL = "https://api.ximilar.com";
 
+type Nullable<T> = T | null | undefined;
+
 interface XimilarObject {
   name?: string;
   _identification?: {
@@ -24,6 +26,7 @@ interface XimilarRecord {
 
 interface XimilarResponse {
   records?: XimilarRecord[];
+  status?: { code?: number; text?: string };
 }
 
 type BestMatch = {
@@ -50,7 +53,7 @@ type BestMatch = {
     median?: number | null;
     low?: number | null;
     high?: number | null;
-  };
+  } | Record<string, unknown>;
 };
 
 type Extracted = { match: BestMatch | undefined; tags: XimilarObject["_tags"] | undefined };
@@ -192,11 +195,9 @@ function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Ca
 
 export async function identifyCard(base64Image: string): Promise<Card | null> {
   try {
-    console.log("identifyCard: sport_id pass 1 (sports first)");
     const sportData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
       records: [{ _base64: base64Image }],
       pricing: true,
-      price_sources: ["tcgplayer", "ebay"],
       slab_grade: true,
       slab_id: true,
     });
@@ -204,33 +205,23 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     if ((sportRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(sportRecord?._objects);
       const c = toCard(match, tags);
-      if (c) {
-        console.log("identifyCard: sport_id success", { name: c.name, price: c.price });
-        return c;
-      }
+      if (c) return c;
     }
 
-    console.log("identifyCard: analyze pass 2 (broad)");
     const analyzeData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, {
       records: [{ _base64: base64Image }],
       pricing: true,
-      price_sources: ["tcgplayer", "ebay", "cardmarket"],
     });
     const analyzeRecord = analyzeData?.records?.[0];
     if ((analyzeRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(analyzeRecord?._objects);
       const c = toCard(match, tags);
-      if (c) {
-        console.log("identifyCard: analyze success", { name: c.name, price: c.price });
-        return c;
-      }
+      if (c) return c;
     }
 
-    console.log("identifyCard: tcg_id pass 3");
     const tcgData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
       records: [{ _base64: base64Image }],
       pricing: true,
-      price_sources: ["tcgplayer", "cardmarket", "ebay"],
       slab_grade: true,
       slab_id: true,
     });
@@ -238,44 +229,30 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     if ((tcgRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(tcgRecord?._objects);
       const c = toCard(match, tags);
-      if (c) {
-        console.log("identifyCard: tcg_id success", { name: c.name, price: c.price });
-        return c;
-      }
+      if (c) return c;
     }
 
-    console.log("identifyCard: slab_id pass 4");
     const slabData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/slab_id`, {
       records: [{ _base64: base64Image }],
-      slab_grade: true,
     });
     const slabRecord = slabData?.records?.[0];
     if ((slabRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(slabRecord?._objects);
       const c = toCard(match, tags);
-      if (c) {
-        console.log("identifyCard: slab_id success", { name: c.name, price: c.price });
-        return c;
-      }
+      if (c) return c;
     }
 
-    console.log("identifyCard: comics_id pass 5");
     const comicsData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/comics_id`, {
       records: [{ _base64: base64Image }],
       pricing: true,
-      price_sources: ["ebay"],
     });
     const comicsRecord = comicsData?.records?.[0];
     if ((comicsRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(comicsRecord?._objects);
       const c = toCard(match, tags);
-      if (c) {
-        console.log("identifyCard: comics_id success", { name: c.name, price: c.price });
-        return c;
-      }
+      if (c) return c;
     }
 
-    console.log("identifyCard: OCR fallback pass 6 (card_ocr_id)");
     const ocrData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/card_ocr_id`, {
       records: [{ _base64: base64Image }],
     });
@@ -283,12 +260,8 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const firstObj = ocrRecord?._objects?.find(o => (o.name ?? "").toLowerCase() === "card") ?? ocrRecord?._objects?.[0];
     const ocrMatch = firstObj?._identification?.best_match ?? (firstObj?._identification?.alternatives ?? [])[0];
     const ocrCard = toCard(ocrMatch, firstObj?._tags);
-    if (ocrCard) {
-      console.log("identifyCard: OCR best-effort result", { name: ocrCard.name });
-      return ocrCard;
-    }
+    if (ocrCard) return ocrCard;
 
-    console.warn("identifyCard: no match across all strategies");
     return null;
   } catch (error) {
     console.error("Error identifying card:", error);
@@ -307,7 +280,6 @@ export async function gradeCard(frontBase64: string, backBase64?: string): Promi
   condition?: string;
 } | null> {
   try {
-    console.log("gradeCard: calling /card-grader/v2/grade with", { hasBack: !!backBase64 });
     const records: Array<{ _base64: string; Side?: string }> = [{ _base64: frontBase64, Side: "front" }];
     if (backBase64 && backBase64.length > 0) {
       records.push({ _base64: backBase64, Side: "back" });
@@ -347,7 +319,6 @@ export async function conditionCard(mode: ConditionMode, frontBase64: string): P
   mode?: string;
 } | null> {
   try {
-    console.log("conditionCard: calling /card-grader/v2/condition with mode", mode);
     const resp = await fetch(`${API_BASE_URL}/card-grader/v2/condition`, {
       method: "POST",
       headers: {
@@ -384,7 +355,6 @@ export async function centeringCard(frontBase64: string): Promise<{
   topBottom?: string;
 } | null> {
   try {
-    console.log("centeringCard: calling /card-grader/v2/centering");
     const resp = await fetch(`${API_BASE_URL}/card-grader/v2/centering`, {
       method: "POST",
       headers: {
@@ -409,4 +379,54 @@ export async function centeringCard(frontBase64: string): Promise<{
     console.error("centeringCard error", e);
     return null;
   }
+}
+
+export async function sportId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; slab_grade?: boolean; analyze_all?: boolean }): Promise<XimilarResponse | null> {
+  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
+    records,
+    pricing: input.pricing ?? false,
+    slab_id: input.slab_id ?? false,
+    slab_grade: input.slab_grade ?? false,
+    analyze_all: input.analyze_all ?? false,
+  });
+}
+
+export async function comicsId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; lang?: string }): Promise<XimilarResponse | null> {
+  const records = input.base64 ? [{ _base64: input.base64, lang: input.lang }] : input.url ? [{ _url: input.url, lang: input.lang }] : [];
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/comics_id`, {
+    records,
+    pricing: input.pricing ?? false,
+    slab_id: input.slab_id ?? false,
+  });
+}
+
+export async function cardOcrId(input: { base64?: string; url?: string }): Promise<XimilarResponse | null> {
+  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/card_ocr_id`, { records });
+}
+
+export async function slabId(input: { base64?: string; url?: string }): Promise<XimilarResponse | null> {
+  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/slab_id`, { records });
+}
+
+export async function slabGrade(input: { base64?: string; url?: string }): Promise<XimilarResponse | null> {
+  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/slab_grade`, { records });
+}
+
+export async function detectCollectibles(input: { base64?: string; url?: string }): Promise<XimilarResponse | null> {
+  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/detect`, { records });
+}
+
+export async function processCollectibles(input: { base64?: string; url?: string }): Promise<XimilarResponse | null> {
+  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/process`, { records });
+}
+
+export async function analyzeCollectibles(input: { base64?: string; url?: string }): Promise<XimilarResponse | null> {
+  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, { records });
 }
