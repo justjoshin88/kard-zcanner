@@ -14,6 +14,7 @@ interface XimilarObject {
   _tags?: {
     Grade?: { name: string }[];
     Company?: { name: string }[];
+    Subcategory?: { name: string }[];
   };
 }
 
@@ -68,7 +69,7 @@ type BestMatch = {
 
 type Extracted = { match: BestMatch | undefined; tags: XimilarObject["_tags"] | undefined };
 
-function pickMatch(obj: XimilarObject | undefined): BestMatch | undefined {
+function pickMatch(obj: XimilarObject | undefined, tags?: XimilarObject["_tags"], ocrNames?: string[]): BestMatch | undefined {
   const candidates: BestMatch[] = [];
   const best = obj?._identification?.best_match;
   if (best) candidates.push(best);
@@ -83,8 +84,28 @@ function pickMatch(obj: XimilarObject | undefined): BestMatch | undefined {
     if (m.links && Object.keys(m.links).length > 0) s += 1;
     const pr = m.pricing as unknown;
     if (pr && typeof pr === "object") s += 2;
+    const tagSub = tags?.Subcategory?.[0]?.name?.toLowerCase();
+    const mSub = (m.subcategory ?? "").toLowerCase();
+    if (tagSub && mSub && (mSub.includes(tagSub) || tagSub.includes(mSub))) s += 3;
+    const name = (m.full_name ?? m.name ?? "").toLowerCase();
+    if (Array.isArray(ocrNames) && ocrNames.length > 0) {
+      for (const kw of ocrNames) {
+        if (name.includes(kw.toLowerCase())) { s += 5; break; }
+      }
+    }
     return s;
   };
+  if (best) {
+    const tagSub = tags?.Subcategory?.[0]?.name?.toLowerCase();
+    const mSub = (best.subcategory ?? "").toLowerCase();
+    const consistent = !tagSub || !mSub || mSub.includes(tagSub) || tagSub.includes(mSub);
+    const name = (best.full_name ?? best.name ?? "").toLowerCase();
+    let nameHit = false;
+    if (Array.isArray(ocrNames)) {
+      for (const kw of ocrNames) { if (name.includes(kw.toLowerCase())) { nameHit = true; break; } }
+    }
+    if (consistent && nameHit) return best;
+  }
   candidates.sort((a, b) => score(b) - score(a));
   return candidates[0];
 }
@@ -96,7 +117,7 @@ function extractCardFromObjects(objs: XimilarObject[] | undefined): Extracted {
     return n === "card" || n === "comics";
   });
   const cardObj = primary ?? objs.find(o => o._identification?.best_match || (o._identification?.alternatives ?? []).length > 0);
-  const match = pickMatch(cardObj);
+  const match = pickMatch(cardObj, cardObj?._tags);
   const tags = cardObj?._tags;
   return { match, tags };
 }
@@ -249,9 +270,34 @@ function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Ca
   return card;
 }
 
+function extractOcrNamesFromResponse(data: XimilarResponse | null): string[] {
+  const names: string[] = [];
+  const rec = data?.records?.[0];
+  const texts: string[] = [];
+  const objs = rec?._objects ?? [];
+  for (const o of objs) {
+    const anyO: any = o as any;
+    const ft = anyO?._ocr?.full_text;
+    if (typeof ft === "string") texts.push(ft);
+    const tarr = anyO?._ocr?.texts;
+    if (Array.isArray(tarr)) {
+      for (const t of tarr) if (t?.text && typeof t.text === "string") texts.push(t.text);
+    }
+  }
+  const joined = texts.join(" ");
+  const tokens = joined.match(/[A-Z][A-Z]+(?:\s+[A-Z][A-Z]+)+/g) || [];
+  for (const t of tokens) {
+    const norm = t.trim().toLowerCase();
+    if (norm.length >= 5 && !names.includes(norm)) names.push(norm);
+  }
+  return names;
+}
+
 export async function identifyCard(base64Image: string): Promise<Card | null> {
   try {
     console.log("identifyCard:start");
+    const preOcr = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/card_ocr_id`, { records: [{ _base64: base64Image }] });
+    const ocrNames = extractOcrNamesFromResponse(preOcr);
     const sportData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
       records: [{ _base64: base64Image }],
       pricing: true,
@@ -261,7 +307,8 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const sportRecord = sportData?.records?.[0];
     if ((sportRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(sportRecord?._objects);
-      const c = toCard(match, tags);
+      const chosen = pickMatch((sportRecord?._objects ?? [])[0], tags, ocrNames) || match;
+      const c = toCard(chosen, tags);
       if (c) {
         console.log("identifyCard:sport_id match");
         return c;
@@ -275,7 +322,8 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const analyzeRecord = analyzeData?.records?.[0];
     if ((analyzeRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(analyzeRecord?._objects);
-      const c = toCard(match, tags);
+      const chosen = pickMatch((analyzeRecord?._objects ?? [])[0], tags, ocrNames) || match;
+      const c = toCard(chosen, tags);
       if (c) {
         console.log("identifyCard:analyze match");
         return c;
@@ -291,7 +339,8 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const tcgRecord = tcgData?.records?.[0];
     if ((tcgRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(tcgRecord?._objects);
-      const c = toCard(match, tags);
+      const chosen = pickMatch((tcgRecord?._objects ?? [])[0], tags, ocrNames) || match;
+      const c = toCard(chosen, tags);
       if (c) {
         console.log("identifyCard:tcg_id match");
         return c;
@@ -304,7 +353,8 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const slabRecord = slabData?.records?.[0];
     if ((slabRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(slabRecord?._objects);
-      const c = toCard(match, tags);
+      const chosen = pickMatch((slabRecord?._objects ?? [])[0], tags, ocrNames) || match;
+      const c = toCard(chosen, tags);
       if (c) {
         console.log("identifyCard:slab_id match");
         return c;
@@ -318,16 +368,15 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const comicsRecord = comicsData?.records?.[0];
     if ((comicsRecord?._status?.code ?? 200) === 200) {
       const { match, tags } = extractCardFromObjects(comicsRecord?._objects);
-      const c = toCard(match, tags);
+      const chosen = pickMatch((comicsRecord?._objects ?? [])[0], tags, ocrNames) || match;
+      const c = toCard(chosen, tags);
       if (c) {
         console.log("identifyCard:comics_id match");
         return c;
       }
     }
 
-    const ocrData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/card_ocr_id`, {
-      records: [{ _base64: base64Image }],
-    });
+    const ocrData = preOcr;
     const ocrRecord = ocrData?.records?.[0];
     const firstObj = ocrRecord?._objects?.find(o => {
       const n = (o.name ?? "").toLowerCase();
