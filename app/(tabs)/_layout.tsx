@@ -1,6 +1,7 @@
 import { Tabs } from "expo-router";
-import { Camera, FolderOpen, Search, Settings } from "lucide-react-native";
+import { Camera, FolderOpen, Search } from "lucide-react-native";
 import React from "react";
+import { Image, StyleSheet } from "react-native";
 
 export default function TabLayout() {
   return (
@@ -50,9 +51,25 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: "SETTINGS",
-          tabBarIcon: ({ color }) => <Settings size={24} color={color} strokeWidth={3} />,
+          tabBarIcon: () => (
+            <Image
+              testID="brand-tab-icon"
+              source={{ uri: "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/w48amyklrmna2qkdbzolp" }}
+              style={styles.brandIcon}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+            />
+          ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  brandIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
+});
