@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -38,6 +38,31 @@ export default function ScannerScreen() {
   const cameraRef = useRef<CameraView>(null);
   const { addCard } = useCards();
 
+  async function ensureBase64FromUriWeb(uri: string): Promise<string | null> {
+    try {
+      if (Platform.OS !== 'web') return null;
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      const reader = new FileReader();
+      return await new Promise((resolve) => {
+        reader.onloadend = () => {
+          const result = reader.result;
+          if (typeof result === 'string') {
+            const comma = result.indexOf(',');
+            resolve(comma >= 0 ? result.slice(comma + 1) : result);
+          } else {
+            resolve(null);
+          }
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.error('ensureBase64FromUriWeb error', e);
+      return null;
+    }
+  }
+
   const handleCapture = async () => {
     if (!cameraRef.current || isCapturing) return;
     
@@ -50,8 +75,12 @@ export default function ScannerScreen() {
       
       if (photo) {
         setCapturedImage(photo.uri);
-        setFrontBase64(photo.base64 ?? null);
-        await processImage(photo.base64 || "", photo.uri);
+        let b64 = photo.base64 ?? null;
+        if (!b64) {
+          b64 = await ensureBase64FromUriWeb(photo.uri);
+        }
+        setFrontBase64(b64);
+        await processImage(b64 || "", photo.uri);
       }
     } catch (error) {
       console.error("Error capturing photo:", error);
@@ -70,9 +99,14 @@ export default function ScannerScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setCapturedImage(result.assets[0].uri);
-      setFrontBase64(result.assets[0].base64 ?? null);
-      await processImage(result.assets[0].base64 || "", result.assets[0].uri);
+      const asset = result.assets[0];
+      setCapturedImage(asset.uri);
+      let b64 = asset.base64 ?? null;
+      if (!b64) {
+        b64 = await ensureBase64FromUriWeb(asset.uri);
+      }
+      setFrontBase64(b64);
+      await processImage(b64 || "", asset.uri);
     }
   };
 
@@ -91,7 +125,7 @@ export default function ScannerScreen() {
         setIdentifiedCard(newCard);
       } else {
         console.warn("processImage: no card match returned");
-        Alert.alert("NO CARD DETECTED", "Try a closer, well-lit front image. Avoid sleeves and fill the frame.");
+        Alert.alert("NO CARD DETECTED", "Try a closer, well-lit front image. Avoid sleeves and fill the frame. If the issue persists, ensure your Ximilar API token is configured.");
         setCapturedImage(null);
         setFrontBase64(null);
       }

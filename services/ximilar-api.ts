@@ -1,6 +1,6 @@
 import { Card, MarketListing } from "@/types/card";
 
-const API_TOKEN = "4a1a39b8d2b6795a8d4fd172183147a9b5e5b8ef";
+const API_TOKEN = (process.env.EXPO_PUBLIC_XIMILAR_TOKEN ?? "").trim();
 const API_BASE_URL = "https://api.ximilar.com";
 
 type Nullable<T> = T | null | undefined;
@@ -196,13 +196,19 @@ function extractPrice(match: BestMatch | undefined): number | undefined {
 
 async function postJson<T>(url: string, body: unknown): Promise<T | null> {
   try {
+    if (!API_TOKEN) {
+      console.error("Ximilar API token missing. Set EXPO_PUBLIC_XIMILAR_TOKEN in your env.");
+      return null;
+    }
     const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Token ${API_TOKEN}` },
       body: JSON.stringify(body),
     });
     if (!resp.ok) {
-      console.error("postJson HTTP", resp.status, url);
+      let text: string | undefined;
+      try { text = await resp.text(); } catch {}
+      console.error("postJson HTTP", resp.status, url, text ?? "");
       return null;
     }
     const json = (await resp.json()) as T;
@@ -303,7 +309,11 @@ function extractOcrNamesFromResponse(data: XimilarResponse | null): string[] {
 
 export async function identifyCard(base64Image: string): Promise<Card | null> {
   try {
-    console.log("identifyCard:start");
+    console.log("identifyCard:start len=", base64Image?.length ?? 0);
+    if (!base64Image || base64Image.length < 50) {
+      console.warn("identifyCard: invalid base64 input");
+      return null;
+    }
     const preOcr = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/card_ocr_id`, { records: [{ _base64: base64Image }] });
     const ocrNames = extractOcrNamesFromResponse(preOcr);
 
