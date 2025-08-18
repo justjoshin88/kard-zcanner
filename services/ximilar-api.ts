@@ -1,6 +1,19 @@
 import { Card, MarketListing } from "@/types/card";
+import Constants from "expo-constants";
 
-const API_TOKEN = (process.env.EXPO_PUBLIC_XIMILAR_TOKEN ?? "").trim();
+function resolveXimilarToken(): string {
+  const envToken = (process.env?.EXPO_PUBLIC_XIMILAR_TOKEN as string | undefined)?.trim();
+  if (envToken) return envToken;
+  const anyConstants = Constants as unknown as {
+    expoConfig?: { extra?: Record<string, unknown> };
+    manifest2?: { extra?: Record<string, unknown> };
+  };
+  const extra = anyConstants?.expoConfig?.extra ?? anyConstants?.manifest2?.extra ?? {};
+  const extraToken = (extra?.EXPO_PUBLIC_XIMILAR_TOKEN as string | undefined)?.trim();
+  return extraToken ?? "";
+}
+
+const API_TOKEN = resolveXimilarToken();
 const API_BASE_URL = "https://api.ximilar.com";
 
 type Nullable<T> = T | null | undefined;
@@ -197,7 +210,7 @@ function extractPrice(match: BestMatch | undefined): number | undefined {
 async function postJson<T>(url: string, body: unknown): Promise<T | null> {
   try {
     if (!API_TOKEN) {
-      console.error("Ximilar API token missing. Set EXPO_PUBLIC_XIMILAR_TOKEN in your env.");
+      console.error("Ximilar API token missing. Set EXPO_PUBLIC_XIMILAR_TOKEN in your env or app.json extra.");
       return null;
     }
     const resp = await fetch(url, {
