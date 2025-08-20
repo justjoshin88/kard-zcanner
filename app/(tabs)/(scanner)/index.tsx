@@ -245,23 +245,82 @@ export default function ScannerScreen() {
                 </View>
               ) : null}
 
+              <View style={styles.sectionBox} testID="details-section">
+                <Text style={styles.sectionHeader}>CARD DETAILS</Text>
+                {identifiedCard.year ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>YEAR</Text><Text style={styles.kvVal}>{identifiedCard.year}</Text></View>
+                ) : null}
+                {identifiedCard.set ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>SET</Text><Text style={styles.kvVal}>{identifiedCard.set}</Text></View>
+                ) : null}
+                {identifiedCard.series ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>SERIES</Text><Text style={styles.kvVal}>{identifiedCard.series}</Text></View>
+                ) : null}
+                {identifiedCard.setCode ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>SET CODE</Text><Text style={styles.kvVal}>{identifiedCard.setCode}</Text></View>
+                ) : null}
+                {identifiedCard.setSeriesCode ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>SERIES CODE</Text><Text style={styles.kvVal}>{identifiedCard.setSeriesCode}</Text></View>
+                ) : null}
+                {identifiedCard.cardNumber ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>CARD #</Text><Text style={styles.kvVal}>{identifiedCard.cardNumber}</Text></View>
+                ) : null}
+                {identifiedCard.company ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>COMPANY</Text><Text style={styles.kvVal}>{identifiedCard.company}</Text></View>
+                ) : null}
+                {identifiedCard.team ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>TEAM</Text><Text style={styles.kvVal}>{identifiedCard.team}</Text></View>
+                ) : null}
+                {identifiedCard.subcategory ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>CATEGORY</Text><Text style={styles.kvVal}>{identifiedCard.subcategory}</Text></View>
+                ) : null}
+                {identifiedCard.grade ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>GRADE</Text><Text style={styles.kvVal}>{identifiedCard.grade}</Text></View>
+                ) : null}
+                {identifiedCard.gradeCompany ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>GRADE COMPANY</Text><Text style={styles.kvVal}>{identifiedCard.gradeCompany}</Text></View>
+                ) : null}
+                {identifiedCard.certificateNumber ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>CERTIFICATE</Text><Text style={styles.kvVal}>{identifiedCard.certificateNumber}</Text></View>
+                ) : null}
+                {Array.isArray(identifiedCard.colors) && identifiedCard.colors.length > 0 ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>COLORS</Text><Text style={styles.kvVal}>{identifiedCard.colors.join(', ')}</Text></View>
+                ) : null}
+                {identifiedCard.color ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>COLOR</Text><Text style={styles.kvVal}>{identifiedCard.color}</Text></View>
+                ) : null}
+                {identifiedCard.type ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>TYPE</Text><Text style={styles.kvVal}>{identifiedCard.type}</Text></View>
+                ) : null}
+                {identifiedCard.rarity ? (
+                  <View style={styles.rowBetween}><Text style={styles.kvKey}>RARITY</Text><Text style={styles.kvVal}>{identifiedCard.rarity}</Text></View>
+                ) : null}
+              </View>
+
               {Array.isArray(identifiedCard.listings) && identifiedCard.listings.length > 0 ? (
                 <View style={styles.listingsBox} testID="listings-section">
                   <Text style={styles.sectionHeader}>MARKET LISTINGS</Text>
-                  {identifiedCard.listings.slice(0, 5).map((l, idx) => (
+                  {identifiedCard.listings.slice(0, 10).map((l, idx) => (
                     <TouchableOpacity
                       key={(l.item_id ?? String(idx)) + String(idx)}
-                      style={styles.rowBetween}
+                      style={styles.listingCard}
                       onPress={() => {
                         if (l.item_link) Linking.openURL(l.item_link).catch(() => Alert.alert('ERROR', 'FAILED TO OPEN LINK')); 
                       }}
                       accessibilityRole="link"
                       testID={`listing-${idx}`}
                     >
-                      <Text style={styles.kvKey}>{(l.source ?? 'MARKET').toUpperCase()}</Text>
-                      <Text style={styles.kvVal}>
-                        {typeof l.price === 'number' ? `${l.price.toFixed(2)}` : '-'} {l.currency ?? ''}
-                      </Text>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.kvKey}>{(l.source ?? 'MARKET').toUpperCase()}</Text>
+                        <Text style={styles.kvVal}>
+                          {typeof l.price === 'number' ? `${l.price.toFixed(2)}` : '-'} {l.currency ?? ''}
+                        </Text>
+                      </View>
+                      {l.name ? <Text style={styles.listingName} numberOfLines={2}>{l.name}</Text> : null}
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.kvSubtle}>{[l.grade_company ?? undefined, (typeof l.grade_value === 'number' ? `GRADE ${l.grade_value}` : undefined)].filter(Boolean).join(' • ')}</Text>
+                        <Text style={styles.kvSubtle}>{[l.country_code ?? undefined, l.date_of_creation ?? undefined].filter(Boolean).join(' • ')}</Text>
+                      </View>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -695,12 +754,14 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF",
     padding: 14,
     marginTop: 10,
+    gap: 10,
   },
   sectionBox: {
     backgroundColor: "#000000",
     borderWidth: 4,
     borderColor: "#FFFFFF",
     padding: 14,
+    marginTop: 10,
   },
   sectionAlt: {
     backgroundColor: "#001f3f",
@@ -730,4 +791,23 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     letterSpacing: 0.5,
   },
+  kvSubtle: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: "#CCCCCC",
+    letterSpacing: 0.5,
+  },
+  listingCard: {
+    backgroundColor: "#111111",
+    borderWidth: 2,
+    borderColor: "#333333",
+    padding: 10,
+    gap: 6,
+  },
+  listingName: {
+    fontSize: 12,
+    fontWeight: "900" as const,
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  }
 });
