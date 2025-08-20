@@ -19,6 +19,8 @@ import { useCards } from "@/hooks/card-store";
 import { identifyCard, gradeCard, conditionCard, centeringCard, type ConditionMode } from "@/services/ximilar-api";
 import { Card, MarketListing } from "@/types/card";
 
+import { useXimilarToken } from "@/hooks/ximilar-token";
+
 export default function ScannerScreen() {
   const insets = useSafeAreaInsets();
   const [facing, setFacing] = useState<CameraType>("back");
@@ -37,6 +39,7 @@ export default function ScannerScreen() {
   const [centeringResult, setCenteringResult] = useState<{ centering?: number; leftRight?: string; topBottom?: string } | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const { addCard } = useCards();
+  const { isLoaded: tokenLoaded, token } = useXimilarToken();
 
   async function ensureBase64FromUriWeb(uri: string): Promise<string | null> {
     try {
@@ -111,6 +114,14 @@ export default function ScannerScreen() {
   };
 
   const processImage = async (base64: string, uri: string) => {
+    if (!tokenLoaded) {
+      Alert.alert("PLEASE WAIT", "INITIALIZING SECURE TOKEN...");
+      return;
+    }
+    if (!token || token.trim().length < 10) {
+      Alert.alert("MISSING API KEY", "XIMILAR TOKEN NOT SET. GO TO SETTINGS TO ENTER YOUR TOKEN.");
+      return;
+    }
     setIsProcessing(true);
     try {
       const result = await identifyCard(base64);
@@ -199,7 +210,7 @@ export default function ScannerScreen() {
     setCenteringResult(null);
   };
 
-  if (!permission) {
+  if (!permission || !tokenLoaded) {
     return <View style={styles.container} />;
   }
 
@@ -416,6 +427,17 @@ export default function ScannerScreen() {
             </View>
           </View>
         </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (!token || token.trim().length < 10) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.permissionContainer}>
+          <Text style={styles.permissionText}>XIMILAR API TOKEN REQUIRED</Text>
+          <Text style={[styles.kvVal, { textAlign: 'center', marginBottom: 10 }]}>Open Settings tab to enter your token.</Text>
+        </View>
       </SafeAreaView>
     );
   }
