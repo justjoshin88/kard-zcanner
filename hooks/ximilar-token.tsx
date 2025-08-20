@@ -10,24 +10,32 @@ export type XimilarTokenState = {
   clearToken: () => Promise<void>;
 };
 
+const DEFAULT_RUNTIME_TOKEN = "4a1a39b8d2b6795a8d4fd172183147a9b5e5b8ef";
+
 export const [XimilarTokenProvider, useXimilarToken] = createContextHook<XimilarTokenState>(() => {
   const [token, setTokenState] = useState<string>("");
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
   useEffect(() => {
     let mounted = true;
-    AsyncStorage.getItem("ximilar_token").then((stored) => {
-      if (!mounted) return;
-      const val = (stored ?? "").trim();
-      setTokenState(val);
-      setXimilarToken(val);
-      setIsLoaded(true);
-    }).catch(() => {
-      setIsLoaded(true);
-    });
-    return () => {
-      mounted = false;
-    };
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem("ximilar_token");
+        if (!mounted) return;
+        const val = (stored ?? "").trim();
+        if (val) {
+          setTokenState(val);
+          setXimilarToken(val);
+        } else if (DEFAULT_RUNTIME_TOKEN) {
+          setTokenState(DEFAULT_RUNTIME_TOKEN);
+          setXimilarToken(DEFAULT_RUNTIME_TOKEN);
+          try { await AsyncStorage.setItem("ximilar_token", DEFAULT_RUNTIME_TOKEN); } catch {}
+        }
+      } finally {
+        if (mounted) setIsLoaded(true);
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
   const setToken = useCallback(async (t: string) => {
