@@ -367,62 +367,48 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const preOcr = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/card_ocr_id`, { records: [{ _base64: base64Image }] });
     const ocrNames = extractOcrNamesFromResponse(preOcr);
 
-    const detect = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/detect`, { records: [{ _base64: base64Image }] });
-    const detectObjs = detect?.records?.[0]?._objects ?? [];
-    const multiCards = detectObjs.filter(o => (o.name ?? '').toLowerCase() === 'card').length > 1;
-
-    const processData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/process`, { records: [{ _base64: base64Image }] });
-    const procObjs = processData?.records?.[0]?._objects ?? [];
-    const topNames = procObjs.map(o => (o.name ?? '').toLowerCase());
-    const anyComics = topNames.includes('comics');
-    const anyCard = topNames.includes('card');
-    const subTag = procObjs.find(Boolean)?._tags?.Subcategory?.[0]?.name?.toLowerCase();
-
-    if (anyComics) {
-      const comicsData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/comics_id`, {
-        records: [{ _base64: base64Image, lang: 'en' }],
-        pricing: true,
-        slab_id: true,
-      });
-      const comicsRecord = comicsData?.records?.[0];
-      if ((comicsRecord?._status?.code ?? 200) === 200) {
-        const { match, tags } = extractCardFromObjects(comicsRecord?._objects);
-        const chosen = pickMatch((comicsRecord?._objects ?? [])[0], tags, ocrNames) || match;
-        const c = toCard(chosen, tags);
-        if (c) { console.log('identifyCard:comics_id match'); return c; }
-      }
+    const sportData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
+      records: [{ _base64: base64Image }],
+      pricing: true,
+      slab_grade: true,
+      slab_id: true,
+      analyze_all: true,
+    });
+    const sportRecord = sportData?.records?.[0];
+    if ((sportRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(sportRecord?._objects);
+      const chosen = pickMatch((sportRecord?._objects ?? [])[0], tags, ocrNames) || match;
+      const c = toCard(chosen, tags);
+      if (c) { console.log('identifyCard:sport_id match'); return c; }
     }
 
-    if (anyCard) {
-      const sportData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
-        records: [{ _base64: base64Image }],
-        pricing: true,
-        slab_grade: true,
-        slab_id: true,
-        analyze_all: true,
-      });
-      const sportRecord = sportData?.records?.[0];
-      if ((sportRecord?._status?.code ?? 200) === 200) {
-        const { match, tags } = extractCardFromObjects(sportRecord?._objects);
-        const chosen = pickMatch((sportRecord?._objects ?? [])[0], tags, ocrNames) || match;
-        const c = toCard(chosen, tags);
-        if (c) { console.log('identifyCard:sport_id match'); return c; }
-      }
+    const tcgData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
+      records: [{ _base64: base64Image }],
+      pricing: true,
+      slab_grade: true,
+      slab_id: true,
+      analyze_all: true,
+    });
+    const tcgRecord = tcgData?.records?.[0];
+    if ((tcgRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(tcgRecord?._objects);
+      const chosen = pickMatch((tcgRecord?._objects ?? [])[0], tags, ocrNames) || match;
+      const c = toCard(chosen, tags);
+      if (c) { console.log('identifyCard:tcg_id match'); return c; }
+    }
 
-      const tcgData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
-        records: [{ _base64: base64Image }],
-        pricing: true,
-        slab_grade: true,
-        slab_id: true,
-        analyze_all: true,
-      });
-      const tcgRecord = tcgData?.records?.[0];
-      if ((tcgRecord?._status?.code ?? 200) === 200) {
-        const { match, tags } = extractCardFromObjects(tcgRecord?._objects);
-        const chosen = pickMatch((tcgRecord?._objects ?? [])[0], tags, ocrNames) || match;
-        const c = toCard(chosen, tags);
-        if (c) { console.log('identifyCard:tcg_id match'); return c; }
-      }
+    const comicsData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/comics_id`, {
+      records: [{ _base64: base64Image, lang: 'en' }],
+      pricing: true,
+      slab_id: true,
+      analyze_all: true,
+    });
+    const comicsRecord = comicsData?.records?.[0];
+    if ((comicsRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(comicsRecord?._objects);
+      const chosen = pickMatch((comicsRecord?._objects ?? [])[0], tags, ocrNames) || match;
+      const c = toCard(chosen, tags);
+      if (c) { console.log('identifyCard:comics_id match'); return c; }
     }
 
     const analyzeData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, {
@@ -459,7 +445,7 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const ocrCard = toCard(ocrMatch, firstObj?._tags);
     if (ocrCard) { console.log('identifyCard:ocr match'); return ocrCard; }
 
-    console.warn('identifyCard: no identification, detect objects=', detectObjs.length);
+    console.warn('identifyCard: no identification');
     return null;
   } catch (error) {
     console.error("Error identifying card:", error);
@@ -520,44 +506,36 @@ export async function conditionCard(mode: ConditionMode, frontBase64: string, in
     const token = getXimilarToken();
     if (!token) return null;
 
-    const makeBody = (useUrl: boolean) => ({
-      records: [useUrl && input?.url ? { _url: input.url } : { _base64: frontBase64 }],
-      mode,
-    });
+    const tryModes: ConditionMode[] = [mode, 'psa', 'sgc', 'bgs', 'cgc'].filter((v, i, a) => a.indexOf(v) === i) as ConditionMode[];
 
-    let resp = await fetch(`${API_BASE_URL}/card-grader/v2/condition`, {
+    const requestOnce = async (m: ConditionMode, useUrl: boolean) => fetch(`${API_BASE_URL}/card-grader/v2/condition`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Token ${token}`,
       },
-      body: JSON.stringify(makeBody(false)),
+      body: JSON.stringify({
+        records: [useUrl && input?.url ? { _url: input.url } : { _base64: frontBase64 }],
+        mode: m,
+      }),
     });
 
-    if (!resp.ok && input?.url) {
-      resp = await fetch(`${API_BASE_URL}/card-grader/v2/condition`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Token ${token}`,
-        },
-        body: JSON.stringify(makeBody(true)),
-      });
+    for (const m of tryModes) {
+      let resp = await requestOnce(m, false);
+      if (!resp.ok && input?.url) resp = await requestOnce(m, true);
+      if (!resp.ok) { console.warn('conditionCard HTTP', resp.status, 'mode', m); continue; }
+      const json = (await resp.json()) as any;
+      const obj = json?.records?.[0]?._objects?.[0]?.Condition?.[0] ?? json?.records?.[0]?.Condition?.[0] ?? null;
+      if (!obj) { continue; }
+      return {
+        label: typeof obj.label === "string" ? obj.label : undefined,
+        scale_value: typeof obj.scale_value === "number" ? obj.scale_value : undefined,
+        max_scale_value: typeof obj.max_scale_value === "number" ? obj.max_scale_value : undefined,
+        mode: typeof obj.mode === "string" ? obj.mode : m,
+      };
     }
 
-    if (!resp.ok) {
-      console.warn("conditionCard HTTP", resp.status);
-      return null;
-    }
-    const json = (await resp.json()) as any;
-    const obj = json?.records?.[0]?._objects?.[0]?.Condition?.[0] ?? json?.records?.[0]?.Condition?.[0] ?? null;
-    if (!obj) return null;
-    return {
-      label: typeof obj.label === "string" ? obj.label : undefined,
-      scale_value: typeof obj.scale_value === "number" ? obj.scale_value : undefined,
-      max_scale_value: typeof obj.max_scale_value === "number" ? obj.max_scale_value : undefined,
-      mode: typeof obj.mode === "string" ? obj.mode : undefined,
-    };
+    return null;
   } catch (e) {
     console.error("conditionCard error", e);
     return null;
