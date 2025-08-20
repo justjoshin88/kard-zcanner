@@ -401,7 +401,7 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
           pricing: true,
           slab_grade: true,
           slab_id: true,
-          analyze_all: multiCards,
+          analyze_all: true,
         });
         const tcgRecord = tcgData?.records?.[0];
         if ((tcgRecord?._status?.code ?? 200) === 200) {
@@ -416,7 +416,7 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
           pricing: true,
           slab_grade: true,
           slab_id: true,
-          analyze_all: multiCards,
+          analyze_all: true,
         });
         const sportRecord = sportData?.records?.[0];
         if ((sportRecord?._status?.code ?? 200) === 200) {
@@ -431,6 +431,7 @@ export async function identifyCard(base64Image: string): Promise<Card | null> {
     const analyzeData = await postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, {
       records: [{ _base64: base64Image }],
       pricing: true,
+      analyze_all: true,
     });
     const analyzeRecord = analyzeData?.records?.[0];
     if ((analyzeRecord?._status?.code ?? 200) === 200) {
@@ -586,10 +587,10 @@ export async function sportId(input: { base64?: string; url?: string; pricing?: 
   const records = recBase.map(r => ({ ...r, ...(input.lang !== undefined ? { lang: input.lang } : {}) }));
   return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
     records,
-    pricing: input.pricing ?? false,
+    pricing: input.pricing ?? true,
     slab_id: input.slab_id ?? false,
     slab_grade: input.slab_grade ?? false,
-    analyze_all: input.analyze_all ?? false,
+    analyze_all: input.analyze_all ?? true,
   });
 }
 
@@ -598,10 +599,10 @@ export async function tcgId(input: { base64?: string; url?: string; pricing?: bo
   const records = recBase.map(r => ({ ...r, ...(input.lang !== undefined ? { lang: input.lang } : {}) }));
   return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
     records,
-    pricing: input.pricing ?? false,
+    pricing: input.pricing ?? true,
     slab_id: input.slab_id ?? false,
     slab_grade: input.slab_grade ?? false,
-    analyze_all: input.analyze_all ?? false,
+    analyze_all: input.analyze_all ?? true,
   });
 }
 
@@ -610,9 +611,9 @@ export async function comicsId(input: { base64?: string; url?: string; pricing?:
   const records = recBase.map(r => ({ ...r, ...(input.lang !== undefined ? { lang: input.lang } : {}) }));
   return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/comics_id`, {
     records,
-    pricing: input.pricing ?? false,
+    pricing: input.pricing ?? true,
     slab_id: input.slab_id ?? false,
-    analyze_all: input.analyze_all ?? false,
+    analyze_all: input.analyze_all ?? true,
   });
 }
 
@@ -645,5 +646,63 @@ export async function processCollectibles(input: { base64?: string; url?: string
 export async function analyzeCollectibles(input: { base64?: string; url?: string; pricing?: boolean; analyze_all?: boolean; lang?: string | boolean }): Promise<XimilarResponse | null> {
   const recBase = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
   const records = recBase.map(r => ({ ...r, ...(input.lang !== undefined ? { lang: input.lang } : {}) }));
-  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, { records, pricing: input.pricing ?? false, analyze_all: input.analyze_all ?? false });
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, { records, pricing: input.pricing ?? true, analyze_all: input.analyze_all ?? true });
+}
+
+export async function identifyFromUrl(inputUrl: string): Promise<Card | null> {
+  try {
+    let url = (inputUrl ?? "").trim();
+    if (!url) return null;
+    const looksImage = /\.(jpg|jpeg|png|webp|gif)(\?|#|$)/i.test(url);
+    if (!looksImage) {
+      try {
+        const res = await fetch(url, { method: 'GET' });
+        const html = await res.text();
+        const og = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i);
+        const img = og?.[1];
+        if (img && typeof img === 'string') url = img;
+      } catch {}
+    }
+
+    const sport = await sportId({ url, pricing: true, analyze_all: true, slab_id: true, slab_grade: true });
+    const sportRecord = sport?.records?.[0];
+    if ((sportRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(sportRecord?._objects);
+      const chosen = pickMatch((sportRecord?._objects ?? [])[0], tags, undefined) || match;
+      const c = toCard(chosen, tags);
+      if (c) return c;
+    }
+
+    const tcg = await tcgId({ url, pricing: true, analyze_all: true, slab_id: true, slab_grade: true });
+    const tcgRecord = tcg?.records?.[0];
+    if ((tcgRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(tcgRecord?._objects);
+      const chosen = pickMatch((tcgRecord?._objects ?? [])[0], tags, undefined) || match;
+      const c = toCard(chosen, tags);
+      if (c) return c;
+    }
+
+    const comics = await comicsId({ url, pricing: true, analyze_all: true, slab_id: true, lang: 'en' });
+    const comicsRecord = comics?.records?.[0];
+    if ((comicsRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(comicsRecord?._objects);
+      const chosen = pickMatch((comicsRecord?._objects ?? [])[0], tags, undefined) || match;
+      const c = toCard(chosen, tags);
+      if (c) return c;
+    }
+
+    const analyze = await analyzeCollectibles({ url, pricing: true, analyze_all: true });
+    const analyzeRecord = analyze?.records?.[0];
+    if ((analyzeRecord?._status?.code ?? 200) === 200) {
+      const { match, tags } = extractCardFromObjects(analyzeRecord?._objects);
+      const chosen = pickMatch((analyzeRecord?._objects ?? [])[0], tags, undefined) || match;
+      const c = toCard(chosen, tags);
+      if (c) return c;
+    }
+
+    return null;
+  } catch (e) {
+    console.error('identifyFromUrl error', e);
+    return null;
+  }
 }
