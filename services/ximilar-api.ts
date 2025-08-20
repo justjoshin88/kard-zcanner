@@ -554,8 +554,9 @@ export async function centeringCard(frontBase64: string): Promise<{
   }
 }
 
-export async function sportId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; slab_grade?: boolean; analyze_all?: boolean }): Promise<XimilarResponse | null> {
-  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+export async function sportId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; slab_grade?: boolean; analyze_all?: boolean; lang?: string | boolean }): Promise<XimilarResponse | null> {
+  const recBase = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  const records = recBase.map(r => ({ ...r, ...(input.lang !== undefined ? { lang: input.lang } : {}) }));
   return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/sport_id`, {
     records,
     pricing: input.pricing ?? false,
@@ -565,8 +566,9 @@ export async function sportId(input: { base64?: string; url?: string; pricing?: 
   });
 }
 
-export async function tcgId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; slab_grade?: boolean; analyze_all?: boolean }): Promise<XimilarResponse | null> {
-  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+export async function tcgId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; slab_grade?: boolean; analyze_all?: boolean; lang?: string | boolean }): Promise<XimilarResponse | null> {
+  const recBase = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  const records = recBase.map(r => ({ ...r, ...(input.lang !== undefined ? { lang: input.lang } : {}) }));
   return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/tcg_id`, {
     records,
     pricing: input.pricing ?? false,
@@ -576,17 +578,20 @@ export async function tcgId(input: { base64?: string; url?: string; pricing?: bo
   });
 }
 
-export async function comicsId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; lang?: string }): Promise<XimilarResponse | null> {
-  const records = input.base64 ? [{ _base64: input.base64, lang: input.lang }] : input.url ? [{ _url: input.url, lang: input.lang }] : [];
+export async function comicsId(input: { base64?: string; url?: string; pricing?: boolean; slab_id?: boolean; lang?: string | boolean; analyze_all?: boolean }): Promise<XimilarResponse | null> {
+  const recBase = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  const records = recBase.map(r => ({ ...r, ...(input.lang !== undefined ? { lang: input.lang } : {}) }));
   return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/comics_id`, {
     records,
     pricing: input.pricing ?? false,
     slab_id: input.slab_id ?? false,
+    analyze_all: input.analyze_all ?? false,
   });
 }
 
-export async function cardOcrId(input: { base64?: string; url?: string }): Promise<XimilarResponse | null> {
-  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+export async function cardOcrId(input: { base64?: string; url?: string; lang?: string | boolean }): Promise<XimilarResponse | null> {
+  const recBase = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  const records = recBase.map(r => ({ ...r, ...(input.lang !== undefined ? { lang: input.lang } : {}) }));
   return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/card_ocr_id`, { records });
 }
 
@@ -610,7 +615,8 @@ export async function processCollectibles(input: { base64?: string; url?: string
   return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/process`, { records });
 }
 
-export async function analyzeCollectibles(input: { base64?: string; url?: string }): Promise<XimilarResponse | null> {
-  const records = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
-  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, { records });
+export async function analyzeCollectibles(input: { base64?: string; url?: string; pricing?: boolean; analyze_all?: boolean; lang?: string | boolean }): Promise<XimilarResponse | null> {
+  const recBase = input.base64 ? [{ _base64: input.base64 }] : input.url ? [{ _url: input.url }] : [];
+  const records = recBase.map(r => ({ ...r, ...(input.lang !== undefined ? { lang: input.lang } : {}) }));
+  return postJson<XimilarResponse>(`${API_BASE_URL}/collectibles/v2/analyze`, { records, pricing: input.pricing ?? false, analyze_all: input.analyze_all ?? false });
 }
