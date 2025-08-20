@@ -5,6 +5,7 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { CardProvider } from "@/hooks/card-store";
 import { trpc, trpcClient } from "@/lib/trpc";
+import { XimilarTokenProvider } from "@/hooks/ximilar-token";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -26,11 +27,13 @@ export default function RootLayout() {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <CardProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <RootLayoutNav />
-          </GestureHandlerRootView>
-        </CardProvider>
+        <XimilarTokenProvider>
+          <CardProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <RootLayoutNav />
+            </GestureHandlerRootView>
+          </CardProvider>
+        </XimilarTokenProvider>
       </QueryClientProvider>
     </trpc.Provider>
   );

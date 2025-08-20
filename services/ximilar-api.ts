@@ -1,7 +1,16 @@
 import { Card, MarketListing } from "@/types/card";
 import Constants from "expo-constants";
 
+let RUNTIME_TOKEN = "";
+export function setXimilarToken(token: string) {
+  RUNTIME_TOKEN = (token ?? "").trim();
+}
+
 function resolveXimilarToken(): string {
+  if (RUNTIME_TOKEN) return RUNTIME_TOKEN;
+  const gt: unknown = (globalThis as unknown as { EXPO_PUBLIC_XIMILAR_TOKEN?: string })?.EXPO_PUBLIC_XIMILAR_TOKEN;
+  const globalToken = (typeof gt === "string" ? gt : undefined)?.trim();
+  if (globalToken) return globalToken;
   const envToken = (process.env?.EXPO_PUBLIC_XIMILAR_TOKEN as string | undefined)?.trim();
   if (envToken) return envToken;
   const anyConstants = Constants as unknown as {
@@ -13,7 +22,7 @@ function resolveXimilarToken(): string {
   return extraToken ?? "";
 }
 
-const API_TOKEN = resolveXimilarToken();
+function getXimilarToken(): string { return RUNTIME_TOKEN || resolveXimilarToken(); }
 const API_BASE_URL = "https://api.ximilar.com";
 
 type Nullable<T> = T | null | undefined;
@@ -209,13 +218,14 @@ function extractPrice(match: BestMatch | undefined): number | undefined {
 
 async function postJson<T>(url: string, body: unknown): Promise<T | null> {
   try {
-    if (!API_TOKEN) {
-      console.error("Ximilar API token missing. Set EXPO_PUBLIC_XIMILAR_TOKEN in your env or app.json extra.");
+    const token = getXimilarToken();
+    if (!token) {
+      console.error("Ximilar API token missing. Set EXPO_PUBLIC_XIMILAR_TOKEN in your env, add it to app.json -> expo.extra.EXPO_PUBLIC_XIMILAR_TOKEN, or call setXimilarToken(token) at runtime.");
       return null;
     }
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Token ${API_TOKEN}` },
+      headers: { "Content-Type": "application/json", Authorization: `Token ${getXimilarToken()}` },
       body: JSON.stringify(body),
     });
     if (!resp.ok) {
@@ -451,7 +461,7 @@ export async function gradeCard(frontBase64: string, backBase64?: string): Promi
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Token ${API_TOKEN}`,
+        Authorization: `Token ${getXimilarToken()}`,
       },
       body: JSON.stringify({ records }),
     });
@@ -486,7 +496,7 @@ export async function conditionCard(mode: ConditionMode, frontBase64: string): P
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Token ${API_TOKEN}`,
+        Authorization: `Token ${getXimilarToken()}`,
       },
       body: JSON.stringify({
         records: [{ _base64: frontBase64 }],
@@ -522,7 +532,7 @@ export async function centeringCard(frontBase64: string): Promise<{
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Token ${API_TOKEN}`,
+        Authorization: `Token ${getXimilarToken()}`,
       },
       body: JSON.stringify({ records: [{ _base64: frontBase64 }] }),
     });

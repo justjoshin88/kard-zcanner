@@ -18,13 +18,16 @@ import {
   Bell,
   Palette,
   Database,
-  Share2
+  Share2,
+  KeyRound
 } from "lucide-react-native";
 import { useCards } from "@/hooks/card-store";
 import { exportToCSV } from "@/utils/export";
+import { useXimilarToken } from "@/hooks/ximilar-token";
 
 export default function SettingsScreen() {
   const { cards, clearAllCards } = useCards();
+  const { token, setToken, clearToken, isLoaded } = useXimilarToken();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [autoBackup, setAutoBackup] = useState(false);
 
@@ -157,6 +160,37 @@ export default function SettingsScreen() {
             onPress={handleClearAll}
             danger
           />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>XIMILAR API</Text>
+
+          <SettingItem
+            icon={<KeyRound size={24} color="#00FFFF" strokeWidth={3} />}
+            title={token ? "UPDATE API TOKEN" : "SET API TOKEN"}
+            subtitle={token ? `Configured` : "Required for card identification"}
+            onPress={() => {
+              Alert.prompt?.(
+                "XIMILAR API TOKEN",
+                "Paste your API token",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Save", onPress: (val?: string) => { setToken(String(val ?? "")); Alert.alert("Saved","Token updated"); } }
+                ],
+                "secure-text",
+                token
+              );
+            }}
+          />
+
+          <SettingItem
+            icon={<Trash2 size={24} color="#FF0000" strokeWidth={3} />}
+            title="CLEAR SAVED TOKEN"
+            subtitle="Remove token from device"
+            onPress={() => { clearToken().then(() => Alert.alert("Done","Token cleared")); }}
+            danger
+          />
+
         </View>
 
         <View style={styles.section}>
