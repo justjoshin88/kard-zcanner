@@ -17,6 +17,9 @@ export interface Card {
   name: string;
   year?: string;
   set?: string;
+  setCode?: string;
+  setSeriesCode?: string;
+  series?: string;
   cardNumber?: string;
   subcategory?: string;
   company?: string;
@@ -28,6 +31,16 @@ export interface Card {
   certificateNumber?: string;
   links?: Record<string, string>;
   listings?: MarketListing[];
+  colors?: string[];
+  color?: string;
+  type?: string;
+  cardId?: string;
+  setCodeFull?: string;
+  title?: string;
+  date?: string;
+  number?: string;
+  publisher?: string;
+  origin_date?: string;
   imageUri: string;
   backImageUri?: string;
   dateAdded: string;

@@ -57,6 +57,9 @@ type BestMatch = {
   year?: string | number | null;
   set?: string;
   set_name?: string;
+  set_code?: string;
+  set_series_code?: string;
+  series?: string;
   card_number?: string;
   number?: string;
   full_name?: string;
@@ -67,6 +70,17 @@ type BestMatch = {
   grade?: string;
   certificate_number?: string;
   links?: Record<string, string>;
+  // TCG extras
+  colors?: string[];
+  color?: string;
+  type?: string;
+  card_id?: string;
+  set_code_full?: string;
+  // Comics extras
+  title?: string;
+  date?: string;
+  publisher?: string;
+  origin_date?: string;
   pricing?: {
     list?: Array<{
       item_id?: string;
@@ -281,6 +295,9 @@ function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Ca
     name: match.name || match.full_name || "Unknown Card",
     year: yearVal,
     set: match.set || match.set_name,
+    setCode: match.set_code,
+    setSeriesCode: match.set_series_code,
+    series: match.series,
     cardNumber: cardNo,
     subcategory: match.subcategory,
     company: match.company,
@@ -292,6 +309,16 @@ function toCard(match: BestMatch | undefined, tags?: XimilarObject["_tags"]): Ca
     certificateNumber: match.certificate_number,
     links: match.links,
     listings,
+    colors: Array.isArray(match.colors) ? match.colors : undefined,
+    color: match.color,
+    type: match.type,
+    cardId: match.card_id,
+    setCodeFull: match.set_code_full,
+    title: match.title,
+    date: match.date,
+    number: match.number,
+    publisher: match.publisher,
+    origin_date: match.origin_date,
     imageUri: "",
     dateAdded: "",
     folderId: null,
