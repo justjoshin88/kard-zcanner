@@ -173,7 +173,7 @@ export default function ScannerScreen() {
     try {
       const [g, c, cen] = await Promise.all([
         gradeCard(frontBase64, backBase64 ?? undefined),
-        conditionCard(conditionMode, frontBase64),
+        conditionCard(conditionMode, frontBase64, { url: capturedImage?.startsWith('http') ? capturedImage : undefined }),
         centeringCard(frontBase64),
       ]);
       setGradeResult(g);

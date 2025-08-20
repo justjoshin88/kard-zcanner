@@ -510,26 +510,43 @@ export async function gradeCard(frontBase64: string, backBase64?: string): Promi
   }
 }
 
-export async function conditionCard(mode: ConditionMode, frontBase64: string): Promise<{
+export async function conditionCard(mode: ConditionMode, frontBase64: string, input?: { url?: string }): Promise<{
   label?: string;
   scale_value?: number;
   max_scale_value?: number;
   mode?: string;
 } | null> {
   try {
-    const resp = await fetch(`${API_BASE_URL}/card-grader/v2/condition`, {
+    const token = getXimilarToken();
+    if (!token) return null;
+
+    const makeBody = (useUrl: boolean) => ({
+      records: [useUrl && input?.url ? { _url: input.url } : { _base64: frontBase64 }],
+      mode,
+    });
+
+    let resp = await fetch(`${API_BASE_URL}/card-grader/v2/condition`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Token ${getXimilarToken()}`,
+        Authorization: `Token ${token}`,
       },
-      body: JSON.stringify({
-        records: [{ _base64: frontBase64 }],
-        mode,
-      }),
+      body: JSON.stringify(makeBody(false)),
     });
+
+    if (!resp.ok && input?.url) {
+      resp = await fetch(`${API_BASE_URL}/card-grader/v2/condition`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Token ${token}`,
+        },
+        body: JSON.stringify(makeBody(true)),
+      });
+    }
+
     if (!resp.ok) {
-      console.error("conditionCard HTTP", resp.status);
+      console.warn("conditionCard HTTP", resp.status);
       return null;
     }
     const json = (await resp.json()) as any;
